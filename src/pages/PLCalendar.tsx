@@ -9,9 +9,24 @@ interface DailyPL {
   [key: string]: number;
 }
 
+interface MonthlyStats {
+  totalPL: number;
+  winningDays: number;
+  losingDays: number;
+  bestDay: { date: string; amount: number } | null;
+  worstDay: { date: string; amount: number } | null;
+}
+
 const PLCalendar = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dailyPL, setDailyPL] = useState<DailyPL>({});
+  const [monthlyStats, setMonthlyStats] = useState<MonthlyStats>({
+    totalPL: 0,
+    winningDays: 0,
+    losingDays: 0,
+    bestDay: null,
+    worstDay: null,
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,6 +52,34 @@ const PLCalendar = () => {
         plByDay[dateKey] = (plByDay[dateKey] || 0) + Number(trade.profit_loss);
       });
       setDailyPL(plByDay);
+
+      // Calculate monthly stats
+      let totalPL = 0;
+      let winningDays = 0;
+      let losingDays = 0;
+      let bestDay: { date: string; amount: number } | null = null;
+      let worstDay: { date: string; amount: number } | null = null;
+
+      Object.entries(plByDay).forEach(([date, amount]) => {
+        totalPL += amount;
+        if (amount > 0) winningDays++;
+        if (amount < 0) losingDays++;
+        
+        if (!bestDay || amount > bestDay.amount) {
+          bestDay = { date, amount };
+        }
+        if (!worstDay || amount < worstDay.amount) {
+          worstDay = { date, amount };
+        }
+      });
+
+      setMonthlyStats({
+        totalPL,
+        winningDays,
+        losingDays,
+        bestDay,
+        worstDay,
+      });
     }
     setLoading(false);
   };
@@ -65,6 +108,61 @@ const PLCalendar = () => {
         <h2 className="text-3xl font-bold tracking-tight">P/L Calendar</h2>
         <p className="text-muted-foreground">Daily profit and loss overview</p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Monthly Summary</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">Total P/L</p>
+              <p className={`text-2xl font-bold ${monthlyStats.totalPL >= 0 ? "text-success" : "text-destructive"}`}>
+                ${monthlyStats.totalPL.toFixed(2)}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">Trading Days</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-success">{monthlyStats.winningDays}</span>
+                <span className="text-sm text-muted-foreground">wins</span>
+                <span className="text-2xl font-bold text-destructive">{monthlyStats.losingDays}</span>
+                <span className="text-sm text-muted-foreground">losses</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">Best Day</p>
+              {monthlyStats.bestDay ? (
+                <>
+                  <p className="text-2xl font-bold text-success">
+                    ${monthlyStats.bestDay.amount.toFixed(2)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {format(new Date(monthlyStats.bestDay.date), "MMM d")}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">No data</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">Worst Day</p>
+              {monthlyStats.worstDay ? (
+                <>
+                  <p className="text-2xl font-bold text-destructive">
+                    ${monthlyStats.worstDay.amount.toFixed(2)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {format(new Date(monthlyStats.worstDay.date), "MMM d")}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">No data</p>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">

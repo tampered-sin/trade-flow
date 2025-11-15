@@ -8,6 +8,7 @@ import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import AddTrade from "./pages/AddTrade";
 import Trades from "./pages/Trades";
+import PLCalendar from "./pages/PLCalendar";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,7 @@ const App = () => (
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/add-trade" element={<AddTrade />} />
             <Route path="/trades" element={<Trades />} />
+            <Route path="/pl-calendar" element={<PLCalendar />} />
           </Route>
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

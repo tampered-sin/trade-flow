@@ -1,4 +1,4 @@
-import { LayoutDashboard, Plus, ListFilter, LogOut } from "lucide-react";
+import { LayoutDashboard, Plus, ListFilter, Calendar, LogOut } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,6 +20,7 @@ const menuItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Add Trade", url: "/add-trade", icon: Plus },
   { title: "Trades", url: "/trades", icon: ListFilter },
+  { title: "P/L Calendar", url: "/pl-calendar", icon: Calendar },
 ];
 
 export function AppSidebar() {

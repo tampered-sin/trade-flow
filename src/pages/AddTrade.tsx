@@ -8,9 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calculator } from "lucide-react";
+import { PositionSizeCalculator } from "@/components/PositionSizeCalculator";
 
 const AddTrade = () => {
   const [loading, setLoading] = useState(false);
+  const [showCalculator, setShowCalculator] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -171,15 +174,26 @@ const AddTrade = () => {
 
               <div className="space-y-2">
                 <Label htmlFor="positionSize">Position Size *</Label>
-                <Input
-                  id="positionSize"
-                  type="number"
-                  step="0.00000001"
-                  placeholder="Number of units"
-                  value={formData.positionSize}
-                  onChange={(e) => setFormData({ ...formData, positionSize: e.target.value })}
-                  required
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="positionSize"
+                    type="number"
+                    step="0.00000001"
+                    placeholder="Number of units"
+                    value={formData.positionSize}
+                    onChange={(e) => setFormData({ ...formData, positionSize: e.target.value })}
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setShowCalculator(true)}
+                    title="Open Position Size Calculator"
+                  >
+                    <Calculator className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -205,6 +219,15 @@ const AddTrade = () => {
           </form>
         </CardContent>
       </Card>
+
+      <PositionSizeCalculator
+        open={showCalculator}
+        onOpenChange={setShowCalculator}
+        onApply={(positionSize) => {
+          setFormData({ ...formData, positionSize: positionSize.toString() });
+        }}
+        initialEntryPrice={formData.entryPrice}
+      />
     </div>
   );
 };

@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight, Calendar } from "lucide-react";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfDay, endOfDay } from "date-fns";
 
 interface DailyPL {
   [key: string]: number;
@@ -17,6 +19,19 @@ interface MonthlyStats {
   worstDay: { date: string; amount: number } | null;
 }
 
+interface Trade {
+  id: string;
+  symbol: string;
+  entry_price: number;
+  exit_price: number | null;
+  profit_loss: number | null;
+  position_type: string;
+  position_size: number;
+  notes: string | null;
+  entry_date: string;
+  exit_date: string | null;
+}
+
 const PLCalendar = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dailyPL, setDailyPL] = useState<DailyPL>({});
@@ -28,6 +43,8 @@ const PLCalendar = () => {
     worstDay: null,
   });
   const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedDayTrades, setSelectedDayTrades] = useState<Trade[]>([]);
 
   useEffect(() => {
     fetchMonthData();
@@ -100,6 +117,23 @@ const PLCalendar = () => {
     if (pl > 0) return "bg-success/20 border-success/40 text-success";
     if (pl < 0) return "bg-destructive/20 border-destructive/40 text-destructive";
     return "bg-muted/50 border-border";
+  };
+
+  const handleDayClick = async (date: Date) => {
+    const dayStart = startOfDay(date);
+    const dayEnd = endOfDay(date);
+
+    const { data: trades } = await supabase
+      .from("trades")
+      .select("*")
+      .gte("entry_date", dayStart.toISOString())
+      .lte("entry_date", dayEnd.toISOString())
+      .order("entry_date", { ascending: true });
+
+    if (trades) {
+      setSelectedDayTrades(trades);
+      setSelectedDate(date);
+    }
   };
 
   return (
@@ -210,9 +244,10 @@ const PLCalendar = () => {
               return (
                 <div
                   key={day.toISOString()}
+                  onClick={() => pl !== 0 && handleDayClick(day)}
                   className={`aspect-square border rounded-lg p-2 flex flex-col items-center justify-center transition-colors ${getDayColor(pl)} ${
                     isToday ? "ring-2 ring-primary" : ""
-                  }`}
+                  } ${pl !== 0 ? "cursor-pointer hover:opacity-80" : ""}`}
                 >
                   <div className="text-sm font-medium">{format(day, "d")}</div>
                   {pl !== 0 && (
@@ -240,6 +275,68 @@ const PLCalendar = () => {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={selectedDate !== null} onOpenChange={(open) => !open && setSelectedDate(null)}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Trades for {selectedDate && format(selectedDate, "MMMM d, yyyy")}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {selectedDayTrades.map((trade) => (
+              <Card key={trade.id}>
+                <CardContent className="pt-6">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <h3 className="text-lg font-semibold">{trade.symbol}</h3>
+                        <Badge variant={trade.position_type === "long" ? "default" : "secondary"}>
+                          {trade.position_type}
+                        </Badge>
+                      </div>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Entry Price:</span>
+                          <span className="font-medium">${Number(trade.entry_price).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Exit Price:</span>
+                          <span className="font-medium">
+                            {trade.exit_price ? `$${Number(trade.exit_price).toFixed(2)}` : "Open"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Position Size:</span>
+                          <span className="font-medium">{Number(trade.position_size)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-muted-foreground">P/L:</span>
+                        <span className={`text-lg font-bold ${
+                          trade.profit_loss && Number(trade.profit_loss) >= 0 
+                            ? "text-success" 
+                            : "text-destructive"
+                        }`}>
+                          {trade.profit_loss ? `$${Number(trade.profit_loss).toFixed(2)}` : "N/A"}
+                        </span>
+                      </div>
+                      {trade.notes && (
+                        <div className="mt-3">
+                          <p className="text-sm text-muted-foreground mb-1">Notes:</p>
+                          <p className="text-sm bg-muted p-2 rounded">{trade.notes}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

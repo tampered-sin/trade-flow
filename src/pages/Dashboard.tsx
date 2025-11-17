@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, Activity, DollarSign, Calculator } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, DollarSign, Calculator, RefreshCw } from "lucide-react";
 import { PositionSizeCalculator } from "@/components/PositionSizeCalculator";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 interface TradeStats {
   totalTrades: number;
@@ -14,6 +15,7 @@ interface TradeStats {
 }
 
 const Dashboard = () => {
+  const { toast } = useToast();
   const [stats, setStats] = useState<TradeStats>({
     totalTrades: 0,
     totalProfitLoss: 0,
@@ -23,6 +25,7 @@ const Dashboard = () => {
   });
   const [recentTrades, setRecentTrades] = useState<any[]>([]);
   const [showCalculator, setShowCalculator] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     fetchStats();
@@ -69,6 +72,54 @@ const Dashboard = () => {
     }
   };
 
+  const handleSyncZerodha = async () => {
+    setSyncing(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to sync trades",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('sync-zerodha-trades', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data.success) {
+        toast({
+          title: "Success",
+          description: data.message,
+        });
+        // Refresh the dashboard data
+        fetchStats();
+        fetchRecentTrades();
+      } else {
+        throw new Error(data.error || 'Failed to sync trades');
+      }
+    } catch (error) {
+      console.error('Sync error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to sync trades from Zerodha';
+      toast({
+        title: "Sync Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -76,7 +127,7 @@ const Dashboard = () => {
         <p className="text-muted-foreground">Your trading performance overview</p>
       </div>
 
-      {/* Trading Calculators Section */}
+      {/* Trading Tools Section */}
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setShowCalculator(true)}>
           <CardHeader>
@@ -91,6 +142,28 @@ const Dashboard = () => {
             </p>
             <Button variant="outline" className="mt-4 w-full" onClick={(e) => { e.stopPropagation(); setShowCalculator(true); }}>
               Open Calculator
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={handleSyncZerodha}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <RefreshCw className={`h-5 w-5 text-primary ${syncing ? 'animate-spin' : ''}`} />
+              Sync Zerodha Trades
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Automatically import your trades from Zerodha Kite. Syncs all executed trades and updates your journal.
+            </p>
+            <Button 
+              variant="outline" 
+              className="mt-4 w-full" 
+              onClick={(e) => { e.stopPropagation(); handleSyncZerodha(); }}
+              disabled={syncing}
+            >
+              {syncing ? 'Syncing...' : 'Sync Now'}
             </Button>
           </CardContent>
         </Card>

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, Activity, DollarSign } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, DollarSign, Calculator } from "lucide-react";
+import { PositionSizeCalculator } from "@/components/PositionSizeCalculator";
+import { Button } from "@/components/ui/button";
 
 interface TradeStats {
   totalTrades: number;
@@ -20,6 +22,7 @@ const Dashboard = () => {
     avgLoss: 0,
   });
   const [recentTrades, setRecentTrades] = useState<any[]>([]);
+  const [showCalculator, setShowCalculator] = useState(false);
 
   useEffect(() => {
     fetchStats();
@@ -71,6 +74,26 @@ const Dashboard = () => {
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
         <p className="text-muted-foreground">Your trading performance overview</p>
+      </div>
+
+      {/* Trading Calculators Section */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setShowCalculator(true)}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5 text-primary" />
+              Position Size & Risk Calculator
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Calculate optimal position size based on account balance, risk percentage, and stop loss distance. Includes risk-reward ratio analysis.
+            </p>
+            <Button variant="outline" className="mt-4 w-full" onClick={(e) => { e.stopPropagation(); setShowCalculator(true); }}>
+              Open Calculator
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -157,6 +180,16 @@ const Dashboard = () => {
           )}
         </CardContent>
       </Card>
+
+      <PositionSizeCalculator
+        open={showCalculator}
+        onOpenChange={setShowCalculator}
+        onApply={(positionSize) => {
+          console.log("Calculated position size:", positionSize);
+          setShowCalculator(false);
+        }}
+        positionType="long"
+      />
     </div>
   );
 };

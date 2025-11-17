@@ -227,6 +227,7 @@ const AddTrade = () => {
           setFormData({ ...formData, positionSize: positionSize.toString() });
         }}
         initialEntryPrice={formData.entryPrice}
+        positionType={formData.positionType}
       />
     </div>
   );

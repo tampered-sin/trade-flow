@@ -16,18 +16,40 @@ interface PositionSizeCalculatorProps {
   onOpenChange: (open: boolean) => void;
   onApply: (positionSize: number) => void;
   initialEntryPrice?: string;
+  positionType?: string;
 }
+
+const calculateRiskReward = (
+  entry: number,
+  stopLoss: number,
+  target: number,
+  positionType: string
+) => {
+  const risk = positionType === "long" 
+    ? Math.abs(entry - stopLoss)
+    : Math.abs(stopLoss - entry);
+  
+  const reward = positionType === "long"
+    ? Math.abs(target - entry)
+    : Math.abs(entry - target);
+    
+  const ratio = risk > 0 ? reward / risk : 0;
+  
+  return { risk, reward, ratio };
+};
 
 export const PositionSizeCalculator = ({
   open,
   onOpenChange,
   onApply,
   initialEntryPrice = "",
+  positionType = "long",
 }: PositionSizeCalculatorProps) => {
   const [accountBalance, setAccountBalance] = useState("");
   const [riskPercentage, setRiskPercentage] = useState("1");
   const [entryPrice, setEntryPrice] = useState(initialEntryPrice);
   const [stopLossPrice, setStopLossPrice] = useState("");
+  const [targetPrice, setTargetPrice] = useState("");
 
   // Load saved account balance from localStorage
   useEffect(() => {
@@ -80,10 +102,20 @@ export const PositionSizeCalculator = ({
 
   const results = calculateResults();
 
+  const riskReward = targetPrice && entryPrice && stopLossPrice
+    ? calculateRiskReward(
+        parseFloat(entryPrice),
+        parseFloat(stopLossPrice),
+        parseFloat(targetPrice),
+        positionType
+      )
+    : { risk: 0, reward: 0, ratio: 0 };
+
   const handleReset = () => {
     setRiskPercentage("1");
     setEntryPrice(initialEntryPrice);
     setStopLossPrice("");
+    setTargetPrice("");
   };
 
   const handleApply = () => {
@@ -166,6 +198,22 @@ export const PositionSizeCalculator = ({
                 onChange={(e) => setStopLossPrice(e.target.value)}
               />
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="targetPrice">Target Price ($)</Label>
+              <Input
+                id="targetPrice"
+                type="number"
+                step="0.00000001"
+                min="0.00000001"
+                placeholder="110.00"
+                value={targetPrice}
+                onChange={(e) => setTargetPrice(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Optional: For risk-reward ratio calculation
+              </p>
+            </div>
           </div>
 
           {/* Calculation Results */}
@@ -195,11 +243,32 @@ export const PositionSizeCalculator = ({
                     : "—"}
                 </span>
               </div>
+
+              {riskReward.ratio > 0 && (
+                <div className="flex justify-between border-t pt-2">
+                  <span className="font-semibold">Risk:Reward Ratio:</span>
+                  <span className={`font-bold ${
+                    riskReward.ratio >= 2 
+                      ? "text-emerald-600 dark:text-emerald-400" 
+                      : riskReward.ratio >= 1 
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-destructive"
+                  }`}>
+                    1:{riskReward.ratio.toFixed(2)}
+                  </span>
+                </div>
+              )}
             </div>
 
             {!results.isValid && accountBalance && entryPrice && stopLossPrice && (
               <p className="text-xs text-destructive">
                 Stop loss price must be different from entry price
+              </p>
+            )}
+            
+            {riskReward.ratio > 0 && riskReward.ratio < 1 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                ⚠️ Risk is greater than reward (R:R below 1:1)
               </p>
             )}
           </div>

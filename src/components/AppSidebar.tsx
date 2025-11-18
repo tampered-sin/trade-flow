@@ -1,4 +1,4 @@
-import { LayoutDashboard, Plus, ListFilter, Calendar, LogOut } from "lucide-react";
+import { LayoutDashboard, Plus, ListFilter, Calendar, Settings as SettingsIcon, LogOut } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +21,7 @@ const menuItems = [
   { title: "Add Trade", url: "/add-trade", icon: Plus },
   { title: "Trades", url: "/trades", icon: ListFilter },
   { title: "P/L Calendar", url: "/pl-calendar", icon: Calendar },
+  { title: "Settings", url: "/settings", icon: SettingsIcon },
 ];
 
 export function AppSidebar() {

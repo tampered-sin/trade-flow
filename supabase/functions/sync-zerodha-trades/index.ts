@@ -28,14 +28,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Get Zerodha credentials from environment
-    const apiKey = Deno.env.get('ZERODHA_API_KEY');
-    const accessToken = Deno.env.get('ZERODHA_ACCESS_TOKEN');
-
-    if (!apiKey || !accessToken) {
-      throw new Error('Zerodha API credentials not configured');
-    }
-
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -56,8 +48,64 @@ Deno.serve(async (req) => {
 
     console.log('Fetching trades from Zerodha for user:', user.id);
 
+    // Get user's Zerodha credentials from database
+    const { data: credentials, error: credError } = await supabase
+      .from('zerodha_credentials')
+      .select('api_key, access_token, token_expires_at')
+      .eq('user_id', user.id)
+      .single();
+
+    if (credError || !credentials) {
+      console.error('No Zerodha credentials found for user:', user.id);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Zerodha not connected. Please connect your account in Settings.',
+          isTokenExpired: true,
+          instructions: 'Please visit Settings to connect your Zerodha account.'
+        }),
+        { 
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    const { api_key, access_token, token_expires_at } = credentials;
+
+    // Check if token is expired
+    if (token_expires_at && new Date(token_expires_at) < new Date()) {
+      console.log('Access token expired for user:', user.id);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Zerodha access token has expired. Please reconnect your account.',
+          isTokenExpired: true,
+          instructions: 'Your Zerodha access token has expired. Please visit Settings and click "Connect to Zerodha" again to reconnect your account.'
+        }),
+        { 
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    if (!api_key || !access_token) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Zerodha credentials incomplete. Please reconnect your account in Settings.',
+          isTokenExpired: true
+        }),
+        { 
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
     // Fetch trades from Zerodha API
-    const zerodhaTrades = await fetchZerodhaTrades(apiKey, accessToken);
+    const zerodhaTrades = await fetchZerodhaTrades(api_key, access_token);
     
     console.log(`Fetched ${zerodhaTrades.length} trades from Zerodha`);
 

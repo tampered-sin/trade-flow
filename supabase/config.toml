@@ -1,1 +1,4 @@
 project_id = "dtccoqmbxnkelzdddack"
+
+[functions.zerodha-callback]
+verify_jwt = false

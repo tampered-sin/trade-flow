@@ -9,6 +9,8 @@ import Dashboard from "./pages/Dashboard";
 import AddTrade from "./pages/AddTrade";
 import Trades from "./pages/Trades";
 import PLCalendar from "./pages/PLCalendar";
+import Settings from "./pages/Settings";
+import ZerodhaCallback from "./pages/ZerodhaCallback";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,7 +29,9 @@ const App = () => (
             <Route path="/add-trade" element={<AddTrade />} />
             <Route path="/trades" element={<Trades />} />
             <Route path="/pl-calendar" element={<PLCalendar />} />
+            <Route path="/settings" element={<Settings />} />
           </Route>
+          <Route path="/auth/zerodha/callback" element={<ZerodhaCallback />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

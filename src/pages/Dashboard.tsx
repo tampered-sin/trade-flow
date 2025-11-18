@@ -105,7 +105,17 @@ const Dashboard = () => {
         fetchStats();
         fetchRecentTrades();
       } else {
-        throw new Error(data.error || 'Failed to sync trades');
+        // Check if it's a token expiration error
+        if (data.isTokenExpired && data.instructions) {
+          toast({
+            title: "Zerodha Access Token Expired",
+            description: data.instructions,
+            variant: "destructive",
+            duration: 10000,
+          });
+        } else {
+          throw new Error(data.error || 'Failed to sync trades');
+        }
       }
     } catch (error) {
       console.error('Sync error:', error);

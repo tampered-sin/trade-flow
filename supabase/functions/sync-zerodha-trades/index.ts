@@ -127,13 +127,21 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('Error syncing Zerodha trades:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    
+    // Check if it's a token expiration error
+    const isTokenError = errorMessage.includes('TokenException') || errorMessage.includes('403');
+    
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: errorMessage
+        error: errorMessage,
+        isTokenExpired: isTokenError,
+        instructions: isTokenError ? 
+          'Your Zerodha access token has expired. Please generate a new token:\n\n1. Visit https://kite.zerodha.com/\n2. Login to your account\n3. Go to Apps > API apps > Your app\n4. Generate new access token\n5. Update the token in Settings' : 
+          null
       }),
       { 
-        status: 500,
+        status: isTokenError ? 401 : 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );

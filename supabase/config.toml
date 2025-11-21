@@ -2,3 +2,6 @@ project_id = "dtccoqmbxnkelzdddack"
 
 [functions.zerodha-callback]
 verify_jwt = false
+
+[functions.check-zerodha-tokens]
+verify_jwt = false

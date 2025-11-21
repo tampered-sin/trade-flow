@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
 
     // Helper function to parse Groww format
     const parseGrowwRow = (row: CSVRow): ParsedTrade | null => {
-      const symbol = String(row['Stock name'] || row['Name'] || row['Scrip Name'] || row['Symbol'] || '').trim();
+      const symbol = String(row['Name'] || row['Stock name'] || row['Scrip Name'] || row['Symbol'] || '').trim();
       
       // Skip header/summary rows
       if (!symbol || 
@@ -137,20 +137,41 @@ Deno.serve(async (req) => {
           symbol.includes('IPFT') ||
           symbol.includes('Brokerage') ||
           symbol.includes('GST') ||
-          symbol.includes('Unique Client')) {
+          symbol.includes('Unique Client') ||
+          symbol.includes('trades') ||
+          symbol === 'Stock name') {
         return null;
       }
 
-      // Groww P&L report format
-      const quantity = parseFloat(String(row['Quantity'] || row['Qty'] || '0'));
-      const buyDate = String(row['Buy Date'] || row['Buy date'] || row['Purchase Date'] || '').trim();
-      const sellDate = String(row['Sell Date'] || row['Sell date'] || row['Sale Date'] || '').trim();
-      const buyPrice = parseFloat(String(row['Buy Price'] || row['Buy price'] || row['Avg. buy price'] || '0'));
-      const sellPrice = parseFloat(String(row['Sell Price'] || row['Sell price'] || row['Avg. sell price'] || '0'));
-      const pnl = parseFloat(String(row['Realized P&L'] || row['Realised P&L'] || row['P&L'] || row['Profit/Loss'] || '0'));
+      // Groww P&L report format - find the quantity column (usually the user's name or a dynamic field)
+      const userColumnKey = Object.keys(row).find(key => 
+        key !== 'Name' && 
+        key !== 'Stock name' &&
+        key !== 'Scrip Name' &&
+        !key.startsWith('__EMPTY') &&
+        row[key] !== 'ISIN' && // Skip ISIN column
+        !isNaN(parseFloat(String(row[key])))
+      );
+
+      // Skip if this is an ISIN row or header row
+      if (row[userColumnKey as string] === 'ISIN' || String(row[userColumnKey as string]).includes('Quantity')) {
+        return null;
+      }
+
+      const quantity = parseFloat(String(row[userColumnKey as string] || row['Quantity'] || row['Qty'] || '0'));
+      const buyDate = String(row['__EMPTY_1'] || row['Buy Date'] || row['Buy date'] || row['Purchase Date'] || '').trim();
+      const sellDate = String(row['__EMPTY_4'] || row['Sell Date'] || row['Sell date'] || row['Sale Date'] || '').trim();
+      const buyPrice = parseFloat(String(row['__EMPTY_2'] || row['Buy Price'] || row['Buy price'] || row['Avg. buy price'] || '0'));
+      const sellPrice = parseFloat(String(row['__EMPTY_5'] || row['Sell Price'] || row['Sell price'] || row['Avg. sell price'] || '0'));
+      const pnl = parseFloat(String(row['__EMPTY_7'] || row['Realized P&L'] || row['Realised P&L'] || row['P&L'] || row['Profit/Loss'] || '0'));
 
       // Use buy date if available, otherwise sell date
       const tradeDate = buyDate || sellDate;
+
+      // Skip rows with invalid or empty dates
+      if (!tradeDate || tradeDate === '' || tradeDate.length < 8) {
+        return null;
+      }
 
       if (!symbol || !tradeDate || !quantity || (buyPrice === 0 && sellPrice === 0)) {
         return null;

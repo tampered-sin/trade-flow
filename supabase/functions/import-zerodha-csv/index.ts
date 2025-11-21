@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { trades } = await req.json();
+    const { trades, format } = await req.json();
 
     if (!Array.isArray(trades) || trades.length === 0) {
       return new Response(
@@ -302,22 +302,23 @@ Deno.serve(async (req) => {
     for (let i = 0; i < (trades as CSVRow[]).length; i++) {
       const row = (trades as CSVRow[])[i];
       try {
-        // Try parsing as Zerodha format first, then Groww
-        let parsedTrade = parseZerodhaRow(row);
-        let detectedBroker = 'zerodha';
+        // Parse based on selected format
+        let parsedTrade = null;
+        const selectedFormat = format || 'zerodha';
         
-        if (!parsedTrade) {
+        if (selectedFormat === 'groww') {
           parsedTrade = parseGrowwRow(row);
-          detectedBroker = 'groww';
+        } else {
+          parsedTrade = parseZerodhaRow(row);
         }
 
         if (!parsedTrade) {
           const rowPreview = Object.entries(row).slice(0, 3).map(([k, v]) => `${k}: ${v}`).join(', ');
           errorDetails.push({
-            row: i + 2, // +2 because Excel/CSV is 1-indexed and has header row
+            row: i + 2,
             reason: 'Could not parse row - missing required fields',
             data: rowPreview,
-            suggestion: `Ensure the file contains columns for symbol, date, quantity, and price. Expected format: ${detectedBroker === 'zerodha' ? 'Zerodha tradebook' : 'Groww P&L report'}`
+            suggestion: `Ensure the file contains columns for symbol, date, quantity, and price. Expected format: ${selectedFormat === 'zerodha' ? 'Zerodha P&L report' : 'Groww P&L statement'}`
           });
           errors++;
           continue;

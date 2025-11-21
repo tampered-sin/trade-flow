@@ -65,11 +65,20 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
     if (format === 'groww') {
       symbol = String(row['Stock name'] || row['Name'] || row['Scrip Name'] || '').trim();
     } else {
-      symbol = String(row.Symbol || row.symbol || row['Scrip Name'] || '').trim();
+      // For Zerodha, check multiple possible column names
+      symbol = String(
+        row['Symbol'] || 
+        row['symbol'] || 
+        row['SYMBOL'] || 
+        row['Scrip Name'] ||
+        ''
+      ).trim();
     }
 
-    // Skip header/summary rows
-    if (!symbol || 
+    // Skip header/summary rows and invalid symbols
+    const isHeaderRow = !symbol || 
+        symbol === 'Symbol' ||
+        symbol === 'Stock name' ||
         symbol.includes('Summary') || 
         symbol.includes('Statement') ||
         symbol.includes('Realised') ||
@@ -85,8 +94,11 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
         symbol.includes('Brokerage') ||
         symbol.includes('GST') ||
         symbol.includes('Unique Client') ||
-        symbol === 'Stock name' ||
-        /^\d+$/.test(symbol)) {
+        symbol.includes('Particulars') ||
+        /^\d+$/.test(symbol) ||
+        !(/[A-Za-z]{2,}/.test(symbol)); // Must have at least 2 letters
+    
+    if (isHeaderRow) {
       issues.push('Invalid or missing symbol');
       valid = false;
     }
@@ -103,10 +115,30 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
       sellPrice = parseFloat(String(row['Sell price'] || row['Sell Price'] || row['Avg Sell Price'] || '0'));
       pnl = parseFloat(String(row['Realised P&L'] || row['Realized P&L'] || row['P&L'] || '0'));
     } else {
-      quantity = parseFloat(String(row.Quantity || row.quantity || row.Qty || '0'));
-      const buyValue = parseFloat(String(row['Buy Value'] || row['buy_value'] || '0'));
-      const sellValue = parseFloat(String(row['Sell Value'] || row['sell_value'] || '0'));
+      // Zerodha format - check multiple column name variations
+      quantity = parseFloat(String(
+        row['Quantity'] || 
+        row['quantity'] || 
+        row['Qty'] || 
+        row['QTY'] ||
+        '0'
+      ));
       
+      const buyValue = parseFloat(String(
+        row['Buy Value'] || 
+        row['buy_value'] || 
+        row['BUY VALUE'] ||
+        '0'
+      ));
+      
+      const sellValue = parseFloat(String(
+        row['Sell Value'] || 
+        row['sell_value'] ||
+        row['SELL VALUE'] ||
+        '0'
+      ));
+      
+      // Calculate prices from values (Zerodha P&L format)
       if (buyValue > 0 && quantity > 0) {
         buyPrice = buyValue / quantity;
       } else {
@@ -119,7 +151,13 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
         sellPrice = parseFloat(String(row['Sell Price'] || row['Sell price'] || '0'));
       }
       
-      pnl = parseFloat(String(row['Realized P&L'] || row['Realised P&L'] || row['P&L'] || '0'));
+      pnl = parseFloat(String(
+        row['Realized P&L'] || 
+        row['Realised P&L'] || 
+        row['P&L'] ||
+        row['REALIZED P&L'] ||
+        '0'
+      ));
     }
 
     if (quantity <= 0) {
@@ -197,13 +235,18 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
       // Parse and validate each row with selected format
       const parsed = parsedData.map((row, idx) => validateAndParseRow(row, idx, selectedFormat!));
       
+      console.log('Sample parsed rows:', parsed.slice(0, 5));
+      console.log('First data row keys:', Object.keys(parsedData[0] || {}));
+      
       // Filter out completely empty rows
       const filteredParsed = parsed.filter(p => 
         p.symbol || p.quantity > 0 || p.buyPrice > 0 || p.sellPrice > 0
       );
 
+      console.log(`Parsed ${parsed.length} rows, filtered to ${filteredParsed.length} non-empty rows`);
+
       if (filteredParsed.length === 0) {
-        throw new Error('No valid data found in the file');
+        throw new Error('No valid data found in the file. Please ensure the file contains trade data with Symbol, Quantity, Buy Value, and Sell Value columns.');
       }
 
       // Auto-select valid rows

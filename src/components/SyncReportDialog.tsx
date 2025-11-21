@@ -8,12 +8,20 @@ import {
 import { CheckCircle, XCircle, AlertCircle, TrendingUp, TrendingDown } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
+interface ErrorDetail {
+  row: number;
+  reason: string;
+  data: any;
+  suggestion: string;
+}
+
 interface SyncReport {
-  totalFetched: number;
+  totalFetched?: number;
   imported: number;
   skipped: number;
-  withPnL: number;
-  withoutPnL: number;
+  withPnL?: number;
+  withoutPnL?: number;
+  errorDetails?: ErrorDetail[];
 }
 
 interface SyncReportDialogProps {
@@ -153,6 +161,34 @@ export const SyncReportDialog = ({ open, onOpenChange, report, title = "Sync Rep
                 </p>
               </div>
             </div>
+          )}
+
+          {/* Error Details */}
+          {report.errorDetails && report.errorDetails.length > 0 && (
+            <Card className="border-destructive/20">
+              <CardContent className="pt-6 space-y-3">
+                <h4 className="font-semibold text-destructive flex items-center gap-2">
+                  <XCircle className="h-5 w-5" />
+                  Import Errors ({report.errorDetails.length})
+                </h4>
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                  {report.errorDetails.map((error, idx) => (
+                    <div key={idx} className="border border-destructive/20 rounded-lg p-3 bg-destructive/5 space-y-2">
+                      <div className="flex items-start gap-2">
+                        <span className="text-xs font-mono bg-destructive/10 px-2 py-1 rounded shrink-0">
+                          Row {error.row}
+                        </span>
+                        <div className="flex-1 space-y-1 min-w-0">
+                          <p className="text-sm font-medium text-destructive">{error.reason}</p>
+                          <p className="text-xs text-muted-foreground font-mono truncate">{error.data}</p>
+                          <p className="text-xs text-muted-foreground">💡 {error.suggestion}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
         </div>
       </DialogContent>

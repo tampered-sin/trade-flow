@@ -21,6 +21,13 @@ interface ParsedTrade {
   broker: string;
 }
 
+interface ErrorDetail {
+  row: number;
+  reason: string;
+  data: any;
+  suggestion: string;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -74,6 +81,7 @@ Deno.serve(async (req) => {
     );
 
     const transformedTrades = [];
+    const errorDetails: ErrorDetail[] = [];
     let skipped = 0;
     let errors = 0;
     let withPnL = 0;
@@ -190,16 +198,26 @@ Deno.serve(async (req) => {
       };
     };
 
-    for (const row of trades as CSVRow[]) {
+    for (let i = 0; i < (trades as CSVRow[]).length; i++) {
+      const row = (trades as CSVRow[])[i];
       try {
         // Try parsing as Zerodha format first, then Groww
         let parsedTrade = parseZerodhaRow(row);
+        let detectedBroker = 'zerodha';
+        
         if (!parsedTrade) {
           parsedTrade = parseGrowwRow(row);
+          detectedBroker = 'groww';
         }
 
         if (!parsedTrade) {
-          console.log('Skipping invalid row - could not parse:', Object.keys(row).slice(0, 5));
+          const rowPreview = Object.entries(row).slice(0, 3).map(([k, v]) => `${k}: ${v}`).join(', ');
+          errorDetails.push({
+            row: i + 2, // +2 because Excel/CSV is 1-indexed and has header row
+            reason: 'Could not parse row - missing required fields',
+            data: rowPreview,
+            suggestion: `Ensure the file contains columns for symbol, date, quantity, and price. Expected format: ${detectedBroker === 'zerodha' ? 'Zerodha tradebook' : 'Groww P&L report'}`
+          });
           errors++;
           continue;
         }
@@ -249,6 +267,14 @@ Deno.serve(async (req) => {
           notes: `Imported from ${broker}\nCategory: ${category}\nBuy: ${buyPrice || 'N/A'} | Sell: ${sellPrice || 'N/A'}`,
         });
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const rowPreview = Object.entries(row).slice(0, 3).map(([k, v]) => `${k}: ${v}`).join(', ');
+        errorDetails.push({
+          row: i + 2,
+          reason: `Processing error: ${errorMessage}`,
+          data: rowPreview,
+          suggestion: 'Check if the row has valid data types (numbers for prices/quantity, valid dates)'
+        });
         console.error('Error processing row:', error, row);
         errors++;
       }
@@ -266,6 +292,7 @@ Deno.serve(async (req) => {
             errors,
             withPnL: 0,
             withoutPnL: 0,
+            errorDetails
           }
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -295,6 +322,7 @@ Deno.serve(async (req) => {
           errors,
           withPnL,
           withoutPnL,
+          errorDetails
         },
         trades: insertedTrades
       }),

@@ -13,6 +13,13 @@ interface CSVImportDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+interface ErrorDetail {
+  row: number;
+  reason: string;
+  data: any;
+  suggestion: string;
+}
+
 interface ImportReport {
   totalRows: number;
   imported: number;
@@ -20,6 +27,7 @@ interface ImportReport {
   errors: number;
   withPnL: number;
   withoutPnL: number;
+  errorDetails?: ErrorDetail[];
 }
 
 export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {

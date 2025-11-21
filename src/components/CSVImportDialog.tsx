@@ -108,7 +108,7 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
         <DialogHeader>
           <DialogTitle>Import Trades from CSV/Excel</DialogTitle>
           <DialogDescription>
-            Upload your Zerodha tradebook file (CSV or Excel) to import historical trades with P&L data.
+            Upload your broker's tradebook file (CSV or Excel) to import historical trades with P&L data. Supports Zerodha and Groww formats.
           </DialogDescription>
         </DialogHeader>
 
@@ -116,12 +116,13 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
             <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
               <AlertCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
               <div className="text-sm text-muted-foreground">
-                <p className="font-medium mb-1">File Format Requirements:</p>
+                <p className="font-medium mb-1">Supported Formats:</p>
                 <ul className="list-disc list-inside space-y-1">
-                  <li>Download from Zerodha Console → Reports → Tradebook</li>
-                  <li>Supports CSV (.csv) and Excel (.xlsx, .xls) files</li>
-                  <li>File must include: Symbol, Trade Date, Quantity, Price, P&L</li>
-                  <li>Supports both Buy and Sell orders</li>
+                  <li><strong>Zerodha:</strong> Console → Reports → Tradebook</li>
+                  <li><strong>Groww:</strong> Reports → P&L Statement</li>
+                  <li>Supports CSV (.csv) and Excel (.xlsx, .xls)</li>
+                  <li>Auto-detects Equity, Futures, and Options</li>
+                  <li>Includes trade categorization and tagging</li>
                 </ul>
               </div>
             </div>

@@ -6,7 +6,19 @@ const corsHeaders = {
 };
 
 interface CSVRow {
-  [key: string]: string;
+  [key: string]: string | number;
+}
+
+interface ParsedTrade {
+  symbol: string;
+  tradeDate: string;
+  quantity: number;
+  buyPrice: number;
+  sellPrice: number;
+  pnl: number;
+  tradeType: string;
+  category: string;
+  broker: string;
 }
 
 Deno.serve(async (req) => {
@@ -47,6 +59,7 @@ Deno.serve(async (req) => {
     }
 
     console.log(`Processing ${trades.length} rows from uploaded file (CSV/Excel)`);
+    console.log('First row sample:', trades[0]);
 
     // Get existing trades to avoid duplicates
     const { data: existingTrades } = await supabase
@@ -66,82 +79,118 @@ Deno.serve(async (req) => {
     let withPnL = 0;
     let withoutPnL = 0;
 
+    // Helper function to determine trade category
+    const determineCategory = (symbol: string): string => {
+      const symbolUpper = symbol.toUpperCase();
+      if (symbolUpper.includes('FUT') || symbolUpper.includes('FUTURE')) return 'futures';
+      if (symbolUpper.includes('CE') || symbolUpper.includes('PE') || 
+          symbolUpper.includes('CALL') || symbolUpper.includes('PUT') || 
+          symbolUpper.includes('OPT')) return 'options';
+      return 'equity';
+    };
+
+    // Helper function to parse Zerodha format
+    const parseZerodhaRow = (row: CSVRow): ParsedTrade | null => {
+      const symbol = String(row['symbol'] || row['Symbol'] || row['SYMBOL'] || row['scrip_name'] || '').trim();
+      const tradeDate = String(row['trade_date'] || row['Trade date'] || row['Date'] || row['date'] || '').trim();
+      const quantity = parseFloat(String(row['quantity'] || row['Quantity'] || row['qty'] || '0'));
+      const buyPrice = parseFloat(String(row['trade_price'] || row['Price'] || row['price'] || row['buy_price'] || '0'));
+      const sellPrice = parseFloat(String(row['sell_price'] || row['Sell Price'] || '0'));
+      const pnl = parseFloat(String(row['pnl'] || row['P&L'] || row['profit_loss'] || '0'));
+      const tradeType = String(row['trade_type'] || row['Type'] || row['type'] || '').toLowerCase();
+
+      if (!symbol || !tradeDate || !quantity || (buyPrice === 0 && sellPrice === 0)) {
+        return null;
+      }
+
+      return {
+        symbol,
+        tradeDate,
+        quantity,
+        buyPrice,
+        sellPrice,
+        pnl,
+        tradeType,
+        category: determineCategory(symbol),
+        broker: 'zerodha'
+      };
+    };
+
+    // Helper function to parse Groww format
+    const parseGrowwRow = (row: CSVRow): ParsedTrade | null => {
+      const symbol = String(row['Stock name'] || row['Name'] || row['Scrip Name'] || row['Symbol'] || '').trim();
+      
+      // Skip header/summary rows
+      if (!symbol || 
+          symbol.includes('Summary') || 
+          symbol.includes('Statement') || 
+          symbol.includes('Realised') ||
+          symbol.includes('Unrealised') ||
+          symbol.includes('Charges') ||
+          symbol.includes('Total') ||
+          symbol.includes('Disclaimer') ||
+          symbol.includes('P&L') ||
+          symbol.includes('Exchange') ||
+          symbol.includes('SEBI') ||
+          symbol.includes('STT') ||
+          symbol.includes('Stamp') ||
+          symbol.includes('IPFT') ||
+          symbol.includes('Brokerage') ||
+          symbol.includes('GST') ||
+          symbol.includes('Unique Client')) {
+        return null;
+      }
+
+      // Groww P&L report format
+      const quantity = parseFloat(String(row['Quantity'] || row['Qty'] || '0'));
+      const buyDate = String(row['Buy Date'] || row['Buy date'] || row['Purchase Date'] || '').trim();
+      const sellDate = String(row['Sell Date'] || row['Sell date'] || row['Sale Date'] || '').trim();
+      const buyPrice = parseFloat(String(row['Buy Price'] || row['Buy price'] || row['Avg. buy price'] || '0'));
+      const sellPrice = parseFloat(String(row['Sell Price'] || row['Sell price'] || row['Avg. sell price'] || '0'));
+      const pnl = parseFloat(String(row['Realized P&L'] || row['Realised P&L'] || row['P&L'] || row['Profit/Loss'] || '0'));
+
+      // Use buy date if available, otherwise sell date
+      const tradeDate = buyDate || sellDate;
+
+      if (!symbol || !tradeDate || !quantity || (buyPrice === 0 && sellPrice === 0)) {
+        return null;
+      }
+
+      return {
+        symbol,
+        tradeDate,
+        quantity,
+        buyPrice,
+        sellPrice,
+        pnl,
+        tradeType: buyPrice > 0 && sellPrice > 0 ? 'both' : 'unknown',
+        category: determineCategory(symbol),
+        broker: 'groww'
+      };
+    };
+
     for (const row of trades as CSVRow[]) {
       try {
-        // Handle different Excel formats
-        let symbol = '';
-        let tradeDate = '';
-        let quantity = 0;
-        let buyPrice = 0;
-        let sellPrice = 0;
-        let pnl = 0;
-        let tradeType = '';
-
-        // Check if it's Groww P&L format (uses "Name" for symbol and dynamic user column)
-        if (row['Name'] || row['Scrip Name']) {
-          symbol = row['Name'] || row['Scrip Name'] || '';
-          
-          // Skip header/summary rows
-          if (!symbol || 
-              symbol.includes('Summary') || 
-              symbol.includes('Statement') || 
-              symbol.includes('Realised') ||
-              symbol.includes('Charges') ||
-              symbol.includes('Total') ||
-              symbol.includes('Disclaimer') ||
-              symbol.includes('Exchange') ||
-              symbol.includes('SEBI') ||
-              symbol.includes('STT') ||
-              symbol.includes('Stamp') ||
-              symbol.includes('IPFT') ||
-              symbol.includes('Brokerage') ||
-              symbol.includes('GST') ||
-              symbol.includes('Futures') ||
-              symbol.includes('Options') ||
-              symbol.includes('Unique Client')) {
-            console.log('Skipping header/summary row:', symbol);
-            continue;
-          }
-
-          // Find the quantity column (could be user name or "Quantity")
-          const userNameKey = Object.keys(row).find(key => 
-            key !== 'Name' && 
-            key !== 'Scrip Name' && 
-            key !== '__EMPTY' && 
-            !key.startsWith('__EMPTY_') &&
-            !isNaN(parseFloat(row[key]))
-          );
-          
-          quantity = parseFloat(userNameKey ? row[userNameKey] : row['Quantity'] || '0');
-          tradeDate = row['__EMPTY'] || row['Buy Date'] || row['Date'] || '';
-          buyPrice = parseFloat(row['__EMPTY_1'] || row['Buy Price'] || '0');
-          sellPrice = parseFloat(row['__EMPTY_4'] || row['Sell Price'] || '0');
-          pnl = parseFloat(row['__EMPTY_6'] || row['Realized P&L'] || row['P&L'] || '0');
-          
-          // Determine trade type based on having buy/sell prices
-          tradeType = buyPrice > 0 && sellPrice > 0 ? 'both' : 'unknown';
-        } else {
-          // Standard Zerodha CSV format
-          symbol = row['symbol'] || row['Symbol'] || row['SYMBOL'] || '';
-          tradeDate = row['trade_date'] || row['Trade date'] || row['Date'] || '';
-          quantity = parseFloat(row['quantity'] || row['Quantity'] || row['qty'] || '0');
-          buyPrice = parseFloat(row['trade_price'] || row['Price'] || row['price'] || '0');
-          tradeType = (row['trade_type'] || row['Type'] || row['type'] || '').toLowerCase();
-          pnl = parseFloat(row['pnl'] || row['P&L'] || row['profit_loss'] || '0');
+        // Try parsing as Zerodha format first, then Groww
+        let parsedTrade = parseZerodhaRow(row);
+        if (!parsedTrade) {
+          parsedTrade = parseGrowwRow(row);
         }
 
-        // Validate required fields
-        if (!symbol || !tradeDate || !quantity || (buyPrice === 0 && sellPrice === 0)) {
-          console.log('Skipping invalid row - missing required fields:', { symbol, tradeDate, quantity, buyPrice, sellPrice });
+        if (!parsedTrade) {
+          console.log('Skipping invalid row - could not parse:', Object.keys(row).slice(0, 5));
           errors++;
           continue;
         }
+
+        const { symbol, tradeDate, quantity, buyPrice, sellPrice, pnl, tradeType, category, broker } = parsedTrade;
 
         // Use buy price for entry, or sell price if no buy price (for short trades)
         const entryPrice = buyPrice > 0 ? buyPrice : sellPrice;
         
         const tradeKey = `${symbol}_${tradeDate}_${entryPrice}_${quantity}`;
         if (existingTradeKeys.has(tradeKey)) {
+          console.log('Skipping duplicate:', tradeKey);
           skipped++;
           continue;
         }
@@ -153,25 +202,30 @@ Deno.serve(async (req) => {
           withoutPnL++;
         }
 
-        // Determine position type: if we have both buy and sell, it's a completed trade
+        // Determine position type
         let positionType = 'long';
         if (tradeType === 'both') {
-          // For completed trades with P&L, determine type from P&L and prices
           positionType = buyPrice < sellPrice ? 'long' : 'short';
         } else if (tradeType.includes('sell') || tradeType.includes('short')) {
           positionType = 'short';
         }
 
+        // Create tags array with category and broker
+        const tags = [category, broker];
+        if (category === 'futures') tags.push('f&o');
+        if (category === 'options') tags.push('f&o');
+
         transformedTrades.push({
           user_id: user.id,
-          symbol: symbol.trim(),
+          symbol: symbol,
           entry_date: tradeDate,
           entry_price: entryPrice,
           exit_price: buyPrice > 0 && sellPrice > 0 ? sellPrice : null,
           position_size: Math.abs(quantity),
           position_type: positionType,
           profit_loss: hasPnL ? pnl : null,
-          notes: `Imported from Groww/Zerodha file\nBuy Price: ${buyPrice}\nSell Price: ${sellPrice}`,
+          tags: tags,
+          notes: `Imported from ${broker}\nCategory: ${category}\nBuy: ${buyPrice || 'N/A'} | Sell: ${sellPrice || 'N/A'}`,
         });
       } catch (error) {
         console.error('Error processing row:', error, row);

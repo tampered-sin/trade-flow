@@ -53,42 +53,80 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
   const [previewData, setPreviewData] = useState<ParsedTrade[]>([]);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [fileName, setFileName] = useState<string>('');
+  const [selectedFormat, setSelectedFormat] = useState<'zerodha' | 'groww' | null>(null);
   const { toast } = useToast();
 
-  const validateAndParseRow = (row: any, index: number): ParsedTrade => {
+  const validateAndParseRow = (row: any, index: number, format: 'zerodha' | 'groww'): ParsedTrade => {
     const issues: string[] = [];
     let valid = true;
 
-    // Extract symbol - must have letters
-    const symbol = String(row.Symbol || row.symbol || row['Stock name'] || row.Name || row['Scrip Name'] || '').trim();
-    if (!symbol || !/[A-Za-z]{2,}/.test(symbol)) {
+    // Extract symbol based on format
+    let symbol = '';
+    if (format === 'groww') {
+      symbol = String(row['Stock name'] || row['Name'] || row['Scrip Name'] || '').trim();
+    } else {
+      symbol = String(row.Symbol || row.symbol || row['Scrip Name'] || '').trim();
+    }
+
+    // Skip header/summary rows
+    if (!symbol || 
+        symbol.includes('Summary') || 
+        symbol.includes('Statement') ||
+        symbol.includes('Realised') ||
+        symbol.includes('Unrealised') ||
+        symbol.includes('Charges') ||
+        symbol.includes('Total') ||
+        symbol.includes('P&L') ||
+        symbol.includes('Exchange') ||
+        symbol.includes('SEBI') ||
+        symbol.includes('STT') ||
+        symbol.includes('Stamp') ||
+        symbol.includes('IPFT') ||
+        symbol.includes('Brokerage') ||
+        symbol.includes('GST') ||
+        symbol.includes('Unique Client') ||
+        symbol === 'Stock name' ||
+        /^\d+$/.test(symbol)) {
       issues.push('Invalid or missing symbol');
       valid = false;
     }
 
-    // Extract numeric values
-    const quantity = parseFloat(String(row.Quantity || row.quantity || row.Qty || '0'));
-    const buyPrice = parseFloat(String(row['Buy Price'] || row['Buy price'] || row['Avg Buy Price'] || '0'));
-    const sellPrice = parseFloat(String(row['Sell Price'] || row['Sell price'] || row['Avg Sell Price'] || '0'));
-    const buyValue = parseFloat(String(row['Buy Value'] || row['buy_value'] || '0'));
-    const sellValue = parseFloat(String(row['Sell Value'] || row['sell_value'] || '0'));
-    const pnl = parseFloat(String(row['Realized P&L'] || row['Realised P&L'] || row['P&L'] || '0'));
+    // Extract numeric values based on format
+    let quantity = 0;
+    let buyPrice = 0;
+    let sellPrice = 0;
+    let pnl = 0;
 
-    // Calculate prices from values if needed
-    let finalBuyPrice = buyPrice;
-    let finalSellPrice = sellPrice;
-    if (buyValue > 0 && quantity > 0 && buyPrice === 0) {
-      finalBuyPrice = buyValue / quantity;
-    }
-    if (sellValue > 0 && quantity > 0 && sellPrice === 0) {
-      finalSellPrice = sellValue / quantity;
+    if (format === 'groww') {
+      quantity = parseFloat(String(row['Quantity'] || '0'));
+      buyPrice = parseFloat(String(row['Buy price'] || row['Buy Price'] || row['Avg Buy Price'] || '0'));
+      sellPrice = parseFloat(String(row['Sell price'] || row['Sell Price'] || row['Avg Sell Price'] || '0'));
+      pnl = parseFloat(String(row['Realised P&L'] || row['Realized P&L'] || row['P&L'] || '0'));
+    } else {
+      quantity = parseFloat(String(row.Quantity || row.quantity || row.Qty || '0'));
+      const buyValue = parseFloat(String(row['Buy Value'] || row['buy_value'] || '0'));
+      const sellValue = parseFloat(String(row['Sell Value'] || row['sell_value'] || '0'));
+      
+      if (buyValue > 0 && quantity > 0) {
+        buyPrice = buyValue / quantity;
+      } else {
+        buyPrice = parseFloat(String(row['Buy Price'] || row['Buy price'] || '0'));
+      }
+      
+      if (sellValue > 0 && quantity > 0) {
+        sellPrice = sellValue / quantity;
+      } else {
+        sellPrice = parseFloat(String(row['Sell Price'] || row['Sell price'] || '0'));
+      }
+      
+      pnl = parseFloat(String(row['Realized P&L'] || row['Realised P&L'] || row['P&L'] || '0'));
     }
 
     if (quantity <= 0) {
       issues.push('Invalid quantity');
       valid = false;
     }
-    if (finalBuyPrice <= 0 && finalSellPrice <= 0) {
+    if (buyPrice <= 0 && sellPrice <= 0) {
       issues.push('Missing price data');
       valid = false;
     }
@@ -100,18 +138,15 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
     if (symbolUpper.includes('CE') || symbolUpper.includes('PE') || 
         symbolUpper.includes('CALL') || symbolUpper.includes('PUT')) category = 'options';
 
-    // Determine broker
-    const broker = row.broker || 'unknown';
-
     return {
       valid,
       symbol,
       quantity,
-      buyPrice: finalBuyPrice,
-      sellPrice: finalSellPrice,
+      buyPrice,
+      sellPrice,
       pnl,
       category,
-      broker,
+      broker: format,
       issues: issues.length > 0 ? issues : undefined,
       rowIndex: index,
       rawData: row
@@ -159,8 +194,8 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
         parsedData = XLSX.utils.sheet_to_json(firstSheet);
       }
 
-      // Parse and validate each row
-      const parsed = parsedData.map((row, idx) => validateAndParseRow(row, idx));
+      // Parse and validate each row with selected format
+      const parsed = parsedData.map((row, idx) => validateAndParseRow(row, idx, selectedFormat!));
       
       // Filter out completely empty rows
       const filteredParsed = parsed.filter(p => 
@@ -214,9 +249,9 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
         return;
       }
 
-      // Send to backend
+      // Send to backend with format
       const { data, error } = await supabase.functions.invoke('import-zerodha-csv', {
-        body: { trades: selectedTrades },
+        body: { trades: selectedTrades, format: selectedFormat },
       });
 
       if (error) throw error;
@@ -270,6 +305,7 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
     setShowPreview(false);
     setPreviewData([]);
     setSelectedRows(new Set());
+    setSelectedFormat(null);
   };
 
   return (
@@ -278,31 +314,75 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
         <DialogContent className={showPreview ? "sm:max-w-6xl" : "sm:max-w-md"}>
           <DialogHeader>
             <DialogTitle>
-              {showPreview ? `Preview Import - ${fileName}` : 'Import Trades from CSV/Excel'}
+              {showPreview ? `Preview Import - ${fileName}` : selectedFormat ? 'Import Trades from CSV/Excel' : 'Select Broker Format'}
             </DialogTitle>
             <DialogDescription>
               {showPreview 
                 ? 'Review and select trades to import. Deselect any rows with issues.'
-                : 'Upload your broker\'s tradebook file (CSV or Excel) to import historical trades with P&L data. Supports Zerodha and Groww formats.'
+                : selectedFormat
+                ? `Upload your ${selectedFormat === 'zerodha' ? 'Zerodha' : 'Groww'} tradebook file (CSV or Excel) to import historical trades with P&L data.`
+                : 'Choose your broker to ensure correct data parsing'
               }
             </DialogDescription>
           </DialogHeader>
 
-          {!showPreview ? (
+          {!selectedFormat ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <Button
+                  variant="outline"
+                  className="h-24 flex flex-col gap-2"
+                  onClick={() => setSelectedFormat('zerodha')}
+                >
+                  <FileText className="h-8 w-8" />
+                  <span className="font-semibold">Zerodha</span>
+                  <span className="text-xs text-muted-foreground">Console P&L Report</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-24 flex flex-col gap-2"
+                  onClick={() => setSelectedFormat('groww')}
+                >
+                  <FileText className="h-8 w-8" />
+                  <span className="font-semibold">Groww</span>
+                  <span className="text-xs text-muted-foreground">P&L Statement</span>
+                </Button>
+              </div>
+            </div>
+          ) : !showPreview ? (
             <div className="space-y-4">
               <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
                 <AlertCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
                 <div className="text-sm text-muted-foreground">
-                  <p className="font-medium mb-1">Supported Formats:</p>
+                  <p className="font-medium mb-1">{selectedFormat === 'zerodha' ? 'Zerodha Format' : 'Groww Format'}:</p>
                   <ul className="list-disc list-inside space-y-1">
-                    <li><strong>Zerodha:</strong> Console → Reports → P&L Statement</li>
-                    <li><strong>Groww:</strong> Reports → P&L Statement (Equity/F&O)</li>
+                    {selectedFormat === 'zerodha' ? (
+                      <>
+                        <li>Go to Console → Reports → P&L Statement</li>
+                        <li>Download as CSV or Excel</li>
+                        <li>File includes: Symbol, Quantity, Buy/Sell Values, P&L</li>
+                      </>
+                    ) : (
+                      <>
+                        <li>Go to Reports → P&L Statement (Equity or F&O)</li>
+                        <li>Download the statement as CSV or Excel</li>
+                        <li>File includes: Stock name, Quantity, Buy/Sell Prices, Dates</li>
+                      </>
+                    )}
                     <li>Supports CSV (.csv) and Excel (.xlsx, .xls)</li>
-                    <li>Auto-detects Equity, Futures, and Options</li>
-                    <li>Preview and validate before importing</li>
                   </ul>
                 </div>
               </div>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedFormat(null)}
+                className="w-full"
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Change Broker
+              </Button>
 
               <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-border rounded-lg hover:border-primary/50 transition-colors">
                 <FileText className="h-12 w-12 text-muted-foreground mb-4" />

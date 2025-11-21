@@ -99,23 +99,68 @@ Deno.serve(async (req) => {
 
     // Helper function to parse Zerodha format (both tradebook and P&L report)
     const parseZerodhaRow = (row: CSVRow): ParsedTrade | null => {
-      const symbol = String(row['symbol'] || row['Symbol'] || row['SYMBOL'] || row['scrip_name'] || '').trim();
+      // Get all possible symbol field names
+      const symbol = String(
+        row['symbol'] || row['Symbol'] || row['SYMBOL'] || 
+        row['scrip_name'] || row['Scrip Name'] || 
+        row['__EMPTY'] || row['__EMPTY_0'] || ''
+      ).trim();
       
-      // Skip summary rows and headers
+      // Skip summary rows, headers, and invalid data
       if (!symbol || 
+          symbol === '' ||
           symbol.includes('Summary') || 
           symbol.includes('Charges') ||
           symbol.includes('Client ID') ||
           symbol.includes('P&L Statement') ||
-          symbol.includes('Other Debits')) {
+          symbol.includes('Other Debits') ||
+          symbol.includes('View Zerodha') ||
+          symbol.includes('Account Head') ||
+          symbol.includes('ISIN') ||
+          symbol === 'Symbol') {
         return null;
       }
 
-      // Try P&L report format first (has Buy Value, Sell Value columns)
-      const buyValue = parseFloat(String(row['Buy Value'] || row['buy_value'] || '0'));
-      const sellValue = parseFloat(String(row['Sell Value'] || row['sell_value'] || '0'));
-      const quantity = parseFloat(String(row['quantity'] || row['Quantity'] || row['qty'] || '0'));
-      const realizedPnL = parseFloat(String(row['Realized P&L'] || row['Realised P&L'] || row['pnl'] || row['P&L'] || row['profit_loss'] || '0'));
+      // Try to find quantity in various columns
+      let quantity = 0;
+      let buyValue = 0;
+      let sellValue = 0;
+      let realizedPnL = 0;
+
+      // Check all numeric columns for data
+      const allKeys = Object.keys(row);
+      for (let i = 0; i < allKeys.length; i++) {
+        const key = allKeys[i];
+        const value = String(row[key]).trim();
+        
+        // Skip if not a number
+        if (isNaN(parseFloat(value)) || value === '') continue;
+        
+        const numValue = parseFloat(value);
+        
+        // Quantity is usually the first numeric column (index 2-3)
+        if (i >= 2 && i <= 3 && quantity === 0 && numValue > 0 && numValue < 100000) {
+          quantity = numValue;
+        }
+        // Buy Value is usually next (index 3-4)
+        else if (i >= 3 && i <= 4 && buyValue === 0 && numValue > 100) {
+          buyValue = numValue;
+        }
+        // Sell Value is usually next (index 4-5)
+        else if (i >= 4 && i <= 5 && sellValue === 0 && numValue > 100) {
+          sellValue = numValue;
+        }
+        // Realized P&L comes after (index 5-6), can be negative
+        else if (i >= 5 && i <= 6 && realizedPnL === 0) {
+          realizedPnL = numValue;
+        }
+      }
+
+      // Also try named columns for P&L report
+      if (quantity === 0) quantity = parseFloat(String(row['Quantity'] || row['quantity'] || row['qty'] || '0'));
+      if (buyValue === 0) buyValue = parseFloat(String(row['Buy Value'] || row['buy_value'] || '0'));
+      if (sellValue === 0) sellValue = parseFloat(String(row['Sell Value'] || row['sell_value'] || '0'));
+      if (realizedPnL === 0) realizedPnL = parseFloat(String(row['Realized P&L'] || row['Realised P&L'] || row['pnl'] || row['P&L'] || '0'));
       
       // P&L Report format (aggregate data)
       if (buyValue > 0 && sellValue > 0 && quantity > 0) {

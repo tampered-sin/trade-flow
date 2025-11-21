@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight, Calendar } from "lucide-react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfDay, endOfDay } from "date-fns";
+import { useCurrency } from "@/hooks/useCurrency";
 
 interface DailyPL {
   [key: string]: number;
@@ -33,6 +34,7 @@ interface Trade {
 }
 
 const PLCalendar = () => {
+  const { formatCurrency } = useCurrency();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dailyPL, setDailyPL] = useState<DailyPL>({});
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats>({
@@ -152,7 +154,7 @@ const PLCalendar = () => {
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">Total P/L</p>
               <p className={`text-2xl font-bold ${monthlyStats.totalPL >= 0 ? "text-success" : "text-destructive"}`}>
-                ${monthlyStats.totalPL.toFixed(2)}
+                {formatCurrency(monthlyStats.totalPL)}
               </p>
             </div>
             <div className="space-y-2">
@@ -169,7 +171,7 @@ const PLCalendar = () => {
               {monthlyStats.bestDay ? (
                 <>
                   <p className="text-2xl font-bold text-success">
-                    ${monthlyStats.bestDay.amount.toFixed(2)}
+                    {formatCurrency(monthlyStats.bestDay.amount)}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {format(new Date(monthlyStats.bestDay.date), "MMM d")}
@@ -184,7 +186,7 @@ const PLCalendar = () => {
               {monthlyStats.worstDay ? (
                 <>
                   <p className="text-2xl font-bold text-destructive">
-                    ${monthlyStats.worstDay.amount.toFixed(2)}
+                    {formatCurrency(monthlyStats.worstDay.amount)}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {format(new Date(monthlyStats.worstDay.date), "MMM d")}
@@ -298,12 +300,12 @@ const PLCalendar = () => {
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Entry Price:</span>
-                          <span className="font-medium">${Number(trade.entry_price).toFixed(2)}</span>
+                          <span className="font-medium">{formatCurrency(Number(trade.entry_price))}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Exit Price:</span>
                           <span className="font-medium">
-                            {trade.exit_price ? `$${Number(trade.exit_price).toFixed(2)}` : "Open"}
+                            {trade.exit_price ? formatCurrency(Number(trade.exit_price)) : "Open"}
                           </span>
                         </div>
                         <div className="flex justify-between">
@@ -320,7 +322,7 @@ const PLCalendar = () => {
                             ? "text-success" 
                             : "text-destructive"
                         }`}>
-                          {trade.profit_loss ? `$${Number(trade.profit_loss).toFixed(2)}` : "N/A"}
+                          {trade.profit_loss ? formatCurrency(Number(trade.profit_loss)) : "N/A"}
                         </span>
                       </div>
                       {trade.notes && (

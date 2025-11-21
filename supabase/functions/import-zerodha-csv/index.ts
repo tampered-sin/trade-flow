@@ -161,7 +161,8 @@ Deno.serve(async (req) => {
 
     // Helper function to parse Groww format
     const parseGrowwRow = (row: CSVRow): ParsedTrade | null => {
-      const symbol = String(row['Name'] || row['Stock name'] || row['Scrip Name'] || row['Symbol'] || '').trim();
+      // Try equity format first (Stock name column)
+      let symbol = String(row['Stock name'] || row['Name'] || row['Scrip Name'] || row['Symbol'] || '').trim();
       
       // Skip header/summary rows
       if (!symbol || 
@@ -182,32 +183,47 @@ Deno.serve(async (req) => {
           symbol.includes('GST') ||
           symbol.includes('Unique Client') ||
           symbol.includes('trades') ||
-          symbol === 'Stock name') {
+          symbol === 'Stock name' ||
+          symbol === 'Scrip Name') {
         return null;
       }
 
-      // Groww P&L report format - find the quantity column (usually the user's name or a dynamic field)
-      const userColumnKey = Object.keys(row).find(key => 
-        key !== 'Name' && 
-        key !== 'Stock name' &&
-        key !== 'Scrip Name' &&
-        !key.startsWith('__EMPTY') &&
-        row[key] !== 'ISIN' && // Skip ISIN column
-        !isNaN(parseFloat(String(row[key])))
-      );
+      // Parse dates - Groww uses multiple formats
+      const parseDateString = (dateStr: string): string => {
+        if (!dateStr || dateStr.trim() === '') return '';
+        
+        // Format 1: DD-MM-YYYY (equity reports)
+        const ddmmyyyy = dateStr.match(/(\d{2})-(\d{2})-(\d{4})/);
+        if (ddmmyyyy) {
+          return `${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`;
+        }
+        
+        // Format 2: DD MMM YYYY (F&O reports)
+        const ddmmmyyyy = dateStr.match(/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/);
+        if (ddmmmyyyy) {
+          const monthMap: { [key: string]: string } = {
+            'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
+            'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+          };
+          const day = ddmmmyyyy[1].padStart(2, '0');
+          const month = monthMap[ddmmmyyyy[2]];
+          return `${ddmmmyyyy[3]}-${month}-${day}`;
+        }
+        
+        return dateStr;
+      };
 
-      // Skip if this is an ISIN row or header row
-      if (row[userColumnKey as string] === 'ISIN' || String(row[userColumnKey as string]).includes('Quantity')) {
-        return null;
-      }
+      // Equity format - direct column names
+      const quantity = parseFloat(String(row['Quantity'] || '0'));
+      const buyDateStr = String(row['Buy date'] || row['Buy Date'] || '').trim();
+      const sellDateStr = String(row['Sell date'] || row['Sell Date'] || '').trim();
+      const buyPrice = parseFloat(String(row['Buy price'] || row['Buy Price'] || row['Avg Buy Price'] || '0'));
+      const sellPrice = parseFloat(String(row['Sell price'] || row['Sell Price'] || row['Avg Sell Price'] || '0'));
+      const pnl = parseFloat(String(row['Realised P&L'] || row['Realized P&L'] || row['P&L'] || '0'));
 
-      const quantity = parseFloat(String(row[userColumnKey as string] || row['Quantity'] || row['Qty'] || '0'));
-      const buyDate = String(row['__EMPTY_1'] || row['Buy Date'] || row['Buy date'] || row['Purchase Date'] || '').trim();
-      const sellDate = String(row['__EMPTY_4'] || row['Sell Date'] || row['Sell date'] || row['Sale Date'] || '').trim();
-      const buyPrice = parseFloat(String(row['__EMPTY_2'] || row['Buy Price'] || row['Buy price'] || row['Avg. buy price'] || '0'));
-      const sellPrice = parseFloat(String(row['__EMPTY_5'] || row['Sell Price'] || row['Sell price'] || row['Avg. sell price'] || '0'));
-      const pnl = parseFloat(String(row['__EMPTY_7'] || row['Realized P&L'] || row['Realised P&L'] || row['P&L'] || row['Profit/Loss'] || '0'));
-
+      const buyDate = parseDateString(buyDateStr);
+      const sellDate = parseDateString(sellDateStr);
+      
       // Use buy date if available, otherwise sell date
       const tradeDate = buyDate || sellDate;
 
@@ -216,7 +232,7 @@ Deno.serve(async (req) => {
         return null;
       }
 
-      if (!symbol || !tradeDate || !quantity || (buyPrice === 0 && sellPrice === 0)) {
+      if (!symbol || !quantity || (buyPrice === 0 && sellPrice === 0)) {
         return null;
       }
 

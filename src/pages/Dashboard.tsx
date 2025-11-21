@@ -7,6 +7,7 @@ import { SyncReportDialog } from "@/components/SyncReportDialog";
 import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrency } from "@/hooks/useCurrency";
 
 interface TradeStats {
   totalTrades: number;
@@ -26,6 +27,7 @@ interface SyncReport {
 
 const Dashboard = () => {
   const { toast } = useToast();
+  const { formatCurrency } = useCurrency();
   const [stats, setStats] = useState<TradeStats>({
     totalTrades: 0,
     totalProfitLoss: 0,
@@ -218,7 +220,7 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${stats.totalProfitLoss >= 0 ? 'text-success' : 'text-destructive'}`}>
-              ${stats.totalProfitLoss.toFixed(2)}
+              {formatCurrency(stats.totalProfitLoss)}
             </div>
             <p className="text-xs text-muted-foreground">
               {stats.totalTrades} trades completed
@@ -243,7 +245,7 @@ const Dashboard = () => {
             <TrendingUp className="h-4 w-4 text-success" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-success">${stats.avgWin.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-success">{formatCurrency(stats.avgWin)}</div>
             <p className="text-xs text-muted-foreground">Per winning trade</p>
           </CardContent>
         </Card>
@@ -254,7 +256,7 @@ const Dashboard = () => {
             <TrendingDown className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">${Math.abs(stats.avgLoss).toFixed(2)}</div>
+            <div className="text-2xl font-bold text-destructive">{formatCurrency(Math.abs(stats.avgLoss))}</div>
             <p className="text-xs text-muted-foreground">Per losing trade</p>
           </CardContent>
         </Card>
@@ -284,7 +286,7 @@ const Dashboard = () => {
                   </div>
                   <div className="text-right">
                     <p className={`font-semibold ${trade.profit_loss && Number(trade.profit_loss) >= 0 ? 'text-success' : 'text-destructive'}`}>
-                      {trade.profit_loss ? `$${Number(trade.profit_loss).toFixed(2)}` : '-'}
+                      {trade.profit_loss ? formatCurrency(Number(trade.profit_loss)) : '-'}
                     </p>
                     <p className="text-sm text-muted-foreground capitalize">{trade.position_type}</p>
                   </div>

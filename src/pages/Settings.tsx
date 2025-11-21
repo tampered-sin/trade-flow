@@ -4,11 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrency } from "@/hooks/useCurrency";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
 
 const Settings = () => {
   const { toast } = useToast();
+  const { currency, updateCurrency } = useCurrency();
   const [loading, setLoading] = useState(false);
   const [credentials, setCredentials] = useState<any>(null);
   const [apiKey, setApiKey] = useState("");
@@ -17,10 +20,49 @@ const Settings = () => {
   const [tokenExpired, setTokenExpired] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<{ valid: boolean; message?: string; error?: string } | null>(null);
+  const [selectedCurrency, setSelectedCurrency] = useState(currency);
+
+  const currencies = [
+    { code: 'USD', symbol: '$', name: 'US Dollar' },
+    { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
+    { code: 'EUR', symbol: '€', name: 'Euro' },
+    { code: 'GBP', symbol: '£', name: 'British Pound' },
+    { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
+    { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
+    { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar' },
+  ];
 
   useEffect(() => {
     fetchCredentials();
   }, []);
+
+  useEffect(() => {
+    setSelectedCurrency(currency);
+  }, [currency]);
+
+  const handleCurrencyChange = async (currencyCode: string) => {
+    const currencyData = currencies.find(c => c.code === currencyCode);
+    if (!currencyData) return;
+
+    setLoading(true);
+    try {
+      await updateCurrency(currencyData.code, currencyData.symbol);
+      setSelectedCurrency(currencyData.code);
+      toast({
+        title: "Success",
+        description: `Currency updated to ${currencyData.name}`,
+      });
+    } catch (error) {
+      console.error("Error updating currency:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update currency",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchCredentials = async () => {
     try {
@@ -211,9 +253,40 @@ const Settings = () => {
   };
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl">
+    <div className="container mx-auto p-6 max-w-4xl space-y-6">
       <h1 className="text-3xl font-bold mb-6">Settings</h1>
 
+      {/* Currency Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Currency Preferences</CardTitle>
+          <CardDescription>
+            Choose your preferred currency for displaying profit/loss
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <Label htmlFor="currency">Currency</Label>
+            <Select value={selectedCurrency} onValueChange={handleCurrencyChange}>
+              <SelectTrigger id="currency">
+                <SelectValue placeholder="Select currency" />
+              </SelectTrigger>
+              <SelectContent>
+                {currencies.map((curr) => (
+                  <SelectItem key={curr.code} value={curr.code}>
+                    {curr.symbol} {curr.name} ({curr.code})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">
+              This currency will be used throughout the app for displaying financial data.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Zerodha Integration */}
       <Card>
         <CardHeader>
           <CardTitle>Zerodha Integration</CardTitle>

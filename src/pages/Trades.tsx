@@ -5,10 +5,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrency } from "@/hooks/useCurrency";
 
 const Trades = () => {
   const [trades, setTrades] = useState<any[]>([]);
   const { toast } = useToast();
+  const { formatCurrency } = useCurrency();
 
   useEffect(() => {
     fetchTrades();
@@ -84,15 +86,15 @@ const Trades = () => {
                       <TableCell>
                         {trade.exit_date ? new Date(trade.exit_date).toLocaleDateString() : '-'}
                       </TableCell>
-                      <TableCell className="text-right">${Number(trade.entry_price).toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(Number(trade.entry_price))}</TableCell>
                       <TableCell className="text-right">
-                        {trade.exit_price ? `$${Number(trade.exit_price).toFixed(2)}` : '-'}
+                        {trade.exit_price ? formatCurrency(Number(trade.exit_price)) : '-'}
                       </TableCell>
                       <TableCell className="text-right">{Number(trade.position_size).toFixed(2)}</TableCell>
                       <TableCell className="text-right">
                         {trade.profit_loss ? (
                           <span className={Number(trade.profit_loss) >= 0 ? 'text-success' : 'text-destructive'}>
-                            ${Number(trade.profit_loss).toFixed(2)}
+                            {formatCurrency(Number(trade.profit_loss))}
                           </span>
                         ) : '-'}
                       </TableCell>

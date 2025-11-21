@@ -245,16 +245,18 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
 
       console.log(`Parsed ${parsed.length} rows, filtered to ${filteredParsed.length} non-empty rows`);
 
-      if (filteredParsed.length === 0) {
+      const rowsToUse = filteredParsed.length > 0 ? filteredParsed : parsed;
+
+      if (rowsToUse.length === 0) {
         throw new Error('No valid data found in the file. Please ensure the file contains trade data with Symbol, Quantity, Buy Value, and Sell Value columns.');
       }
 
       // Auto-select valid rows
       const validIndices = new Set(
-        filteredParsed.filter(p => p.valid).map(p => p.rowIndex)
+        rowsToUse.filter(p => p.valid).map(p => p.rowIndex)
       );
 
-      setPreviewData(filteredParsed);
+      setPreviewData(rowsToUse);
       setSelectedRows(validIndices);
       setShowPreview(true);
       

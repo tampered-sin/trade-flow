@@ -3,18 +3,51 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Trash2, Filter } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrency";
 
 const Trades = () => {
   const [trades, setTrades] = useState<any[]>([]);
+  const [filteredTrades, setFilteredTrades] = useState<any[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedBroker, setSelectedBroker] = useState<string>('all');
   const { toast } = useToast();
   const { formatCurrency } = useCurrency();
 
   useEffect(() => {
     fetchTrades();
   }, []);
+
+  useEffect(() => {
+    applyFilters();
+  }, [trades, selectedCategory, selectedBroker]);
+
+  const applyFilters = () => {
+    let filtered = [...trades];
+
+    // Filter by category
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(trade => {
+        const tags = trade.tags || [];
+        if (selectedCategory === 'f&o') {
+          return tags.includes('futures') || tags.includes('options') || tags.includes('f&o');
+        }
+        return tags.includes(selectedCategory);
+      });
+    }
+
+    // Filter by broker
+    if (selectedBroker !== 'all') {
+      filtered = filtered.filter(trade => {
+        const tags = trade.tags || [];
+        return tags.includes(selectedBroker);
+      });
+    }
+
+    setFilteredTrades(filtered);
+  };
 
   const fetchTrades = async () => {
     const { data } = await supabase
@@ -52,14 +85,104 @@ const Trades = () => {
         <p className="text-muted-foreground">View and manage all your trades</p>
       </div>
 
-      <Card>
+      {/* Filter Section */}
+      <Card className="border-none shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Filter className="h-5 w-5" />
+            Filters
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Category Filters */}
+          <div>
+            <p className="text-sm font-medium text-muted-foreground mb-3">Category</p>
+            <div className="flex flex-wrap gap-2">
+              <Badge
+                variant={selectedCategory === 'all' ? 'default' : 'outline'}
+                className="cursor-pointer transition-all hover:scale-105"
+                onClick={() => setSelectedCategory('all')}
+              >
+                All
+              </Badge>
+              <Badge
+                variant={selectedCategory === 'equity' ? 'default' : 'outline'}
+                className="cursor-pointer transition-all hover:scale-105"
+                onClick={() => setSelectedCategory('equity')}
+              >
+                Equity
+              </Badge>
+              <Badge
+                variant={selectedCategory === 'futures' ? 'default' : 'outline'}
+                className="cursor-pointer transition-all hover:scale-105"
+                onClick={() => setSelectedCategory('futures')}
+              >
+                Futures
+              </Badge>
+              <Badge
+                variant={selectedCategory === 'options' ? 'default' : 'outline'}
+                className="cursor-pointer transition-all hover:scale-105"
+                onClick={() => setSelectedCategory('options')}
+              >
+                Options
+              </Badge>
+              <Badge
+                variant={selectedCategory === 'f&o' ? 'default' : 'outline'}
+                className="cursor-pointer transition-all hover:scale-105"
+                onClick={() => setSelectedCategory('f&o')}
+              >
+                F&O (All)
+              </Badge>
+            </div>
+          </div>
+
+          {/* Broker Filters */}
+          <div>
+            <p className="text-sm font-medium text-muted-foreground mb-3">Broker</p>
+            <div className="flex flex-wrap gap-2">
+              <Badge
+                variant={selectedBroker === 'all' ? 'default' : 'outline'}
+                className="cursor-pointer transition-all hover:scale-105"
+                onClick={() => setSelectedBroker('all')}
+              >
+                All Brokers
+              </Badge>
+              <Badge
+                variant={selectedBroker === 'zerodha' ? 'default' : 'outline'}
+                className="cursor-pointer transition-all hover:scale-105"
+                onClick={() => setSelectedBroker('zerodha')}
+              >
+                Zerodha
+              </Badge>
+              <Badge
+                variant={selectedBroker === 'groww' ? 'default' : 'outline'}
+                className="cursor-pointer transition-all hover:scale-105"
+                onClick={() => setSelectedBroker('groww')}
+              >
+                Groww
+              </Badge>
+            </div>
+          </div>
+
+          {/* Results count */}
+          <div className="pt-2 border-t">
+            <p className="text-sm text-muted-foreground">
+              Showing <span className="font-semibold text-foreground">{filteredTrades.length}</span> of <span className="font-semibold text-foreground">{trades.length}</span> trades
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-none shadow-lg">
         <CardHeader>
           <CardTitle>All Trades</CardTitle>
         </CardHeader>
         <CardContent>
-          {trades.length === 0 ? (
+          {filteredTrades.length === 0 ? (
             <p className="text-muted-foreground text-center py-8">
-              No trades recorded yet. Add your first trade to get started!
+              {trades.length === 0 
+                ? "No trades recorded yet. Add your first trade to get started!"
+                : "No trades match the selected filters. Try adjusting your filter criteria."}
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -68,6 +191,7 @@ const Trades = () => {
                   <TableRow>
                     <TableHead>Symbol</TableHead>
                     <TableHead>Type</TableHead>
+                    <TableHead>Category</TableHead>
                     <TableHead>Entry Date</TableHead>
                     <TableHead>Exit Date</TableHead>
                     <TableHead className="text-right">Entry Price</TableHead>
@@ -78,10 +202,19 @@ const Trades = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {trades.map((trade) => (
+                  {filteredTrades.map((trade) => (
                     <TableRow key={trade.id}>
                       <TableCell className="font-medium">{trade.symbol}</TableCell>
                       <TableCell className="capitalize">{trade.position_type}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {trade.tags && trade.tags.map((tag: string, idx: number) => (
+                            <Badge key={idx} variant="secondary" className="text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      </TableCell>
                       <TableCell>{new Date(trade.entry_date).toLocaleDateString()}</TableCell>
                       <TableCell>
                         {trade.exit_date ? new Date(trade.exit_date).toLocaleDateString() : '-'}

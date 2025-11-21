@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, Activity, DollarSign, Calculator, RefreshCw, Upload } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, DollarSign, Calculator, RefreshCw, Upload, BarChart3 } from "lucide-react";
 import { PositionSizeCalculator } from "@/components/PositionSizeCalculator";
 import { SyncReportDialog } from "@/components/SyncReportDialog";
 import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrency";
+import { LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 interface TradeStats {
   totalTrades: number;
@@ -41,10 +42,14 @@ const Dashboard = () => {
   const [syncReport, setSyncReport] = useState<SyncReport | null>(null);
   const [showSyncReport, setShowSyncReport] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
+  const [profitTrendData, setProfitTrendData] = useState<any[]>([]);
+  const [winRateData, setWinRateData] = useState<any[]>([]);
+  const [distributionData, setDistributionData] = useState<any[]>([]);
 
   useEffect(() => {
     fetchStats();
     fetchRecentTrades();
+    fetchChartData();
   }, []);
 
   const fetchStats = async () => {
@@ -87,6 +92,60 @@ const Dashboard = () => {
     }
   };
 
+  const fetchChartData = async () => {
+    const { data: trades } = await supabase
+      .from("trades")
+      .select("*")
+      .not("profit_loss", "is", null)
+      .order("entry_date", { ascending: true });
+
+    if (trades && trades.length > 0) {
+      // Profit Trend Data - aggregate by date
+      const profitByDate = trades.reduce((acc: any, trade) => {
+        const date = new Date(trade.entry_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        if (!acc[date]) {
+          acc[date] = 0;
+        }
+        acc[date] += Number(trade.profit_loss);
+        return acc;
+      }, {});
+
+      const profitTrend = Object.entries(profitByDate).map(([date, profit]) => ({
+        date,
+        profit: Number(profit),
+      }));
+      setProfitTrendData(profitTrend);
+
+      // Win Rate Over Time - calculate cumulative win rate
+      let wins = 0;
+      let total = 0;
+      const winRateOverTime = trades.map((trade) => {
+        total++;
+        if (Number(trade.profit_loss) > 0) wins++;
+        return {
+          date: new Date(trade.entry_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          winRate: (wins / total) * 100,
+        };
+      });
+      // Sample every few points to avoid overcrowding
+      const sampledWinRate = winRateOverTime.filter((_, index) => index % Math.max(1, Math.floor(winRateOverTime.length / 15)) === 0);
+      setWinRateData(sampledWinRate);
+
+      // Trade Distribution Data
+      const longTrades = trades.filter(t => t.position_type.toLowerCase() === 'long').length;
+      const shortTrades = trades.filter(t => t.position_type.toLowerCase() === 'short').length;
+      const wins_count = trades.filter(t => Number(t.profit_loss) > 0).length;
+      const losses_count = trades.filter(t => Number(t.profit_loss) < 0).length;
+
+      setDistributionData([
+        { name: 'Long', value: longTrades, color: 'hsl(var(--chart-1))' },
+        { name: 'Short', value: shortTrades, color: 'hsl(var(--chart-2))' },
+        { name: 'Wins', value: wins_count, color: 'hsl(var(--success))' },
+        { name: 'Losses', value: losses_count, color: 'hsl(var(--destructive))' },
+      ]);
+    }
+  };
+
   const handleSyncZerodha = async () => {
     setSyncing(true);
     try {
@@ -126,6 +185,7 @@ const Dashboard = () => {
         // Refresh the dashboard data
         fetchStats();
         fetchRecentTrades();
+        fetchChartData();
       } else {
         // Check if it's a token expiration or connection issue
         if (data.isTokenExpired) {
@@ -280,6 +340,164 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Charts Section */}
+      {profitTrendData.length > 0 && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card className="border-none shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-3 text-xl">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <BarChart3 className="h-5 w-5 text-primary" />
+                </div>
+                Profit Trend
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={profitTrendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                  <XAxis 
+                    dataKey="date" 
+                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                  />
+                  <YAxis 
+                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                    formatter={(value: any) => formatCurrency(value)}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="profit" 
+                    stroke="hsl(var(--primary))" 
+                    strokeWidth={3}
+                    dot={{ fill: 'hsl(var(--primary))', r: 5 }}
+                    animationDuration={1500}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card className="border-none shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-3 text-xl">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Activity className="h-5 w-5 text-primary" />
+                </div>
+                Win Rate Over Time
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={winRateData}>
+                  <defs>
+                    <linearGradient id="colorWinRate" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--success))" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0.1}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                  <XAxis 
+                    dataKey="date" 
+                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                  />
+                  <YAxis 
+                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                    domain={[0, 100]}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                    formatter={(value: any) => `${value.toFixed(1)}%`}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="winRate" 
+                    stroke="hsl(var(--success))" 
+                    strokeWidth={2}
+                    fillOpacity={1} 
+                    fill="url(#colorWinRate)"
+                    animationDuration={1500}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {distributionData.length > 0 && (
+        <Card className="border-none shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-3 text-xl">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <TrendingUp className="h-5 w-5 text-primary" />
+              </div>
+              Trade Distribution
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-2 gap-8">
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={distributionData.slice(0, 2)}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                    animationDuration={1500}
+                  >
+                    {distributionData.slice(0, 2).map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={distributionData.slice(2, 4)}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                    animationDuration={1500}
+                  >
+                    {distributionData.slice(2, 4).map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="border-none shadow-lg">
         <CardHeader>

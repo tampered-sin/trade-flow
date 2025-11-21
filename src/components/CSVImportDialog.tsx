@@ -59,24 +59,80 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
     const issues: string[] = [];
     let valid = true;
 
-    // Extract symbol - must have letters
-    const symbol = String(row.Symbol || row.symbol || row['Stock name'] || row.Name || row['Scrip Name'] || '').trim();
-    if (!symbol || !/[A-Za-z]{2,}/.test(symbol)) {
-      issues.push('Invalid or missing symbol');
+    // Extract symbol from various possible column names
+    const symbol = String(
+      row['Scrip Name'] || row['Symbol'] || row['symbol'] || 
+      row['Stock name'] || row['Name'] || row['SYMBOL'] || ''
+    ).trim();
+
+    // Skip non-trade rows (headers, summaries, etc.)
+    const skipKeywords = [
+      'Summary', 'Charges', 'Client', 'Statement', 'Realised', 
+      'Unrealised', 'Total', 'Disclaimer', 'P&L', 'Exchange',
+      'SEBI', 'STT', 'Stamp', 'IPFT', 'Brokerage', 'GST',
+      'Futures', 'Options', 'Quantity', 'Buy Date', 'Scrip Name',
+      'Stock name', 'Name', 'ISIN'
+    ];
+
+    const isHeaderOrSummary = skipKeywords.some(keyword => 
+      symbol.includes(keyword) || symbol === keyword
+    );
+
+    if (!symbol || symbol === '' || isHeaderOrSummary) {
+      return {
+        valid: false,
+        symbol: symbol || 'Empty',
+        quantity: 0,
+        buyPrice: 0,
+        sellPrice: 0,
+        pnl: 0,
+        category: 'equity',
+        broker: 'unknown',
+        issues: ['Not a trade row (header/summary)'],
+        rowIndex: index,
+        rawData: row
+      };
+    }
+
+    // Validate symbol has letters (not just numbers)
+    if (!/[A-Za-z]{2,}/.test(symbol)) {
+      issues.push('Invalid symbol format');
       valid = false;
     }
 
-    // Extract numeric values
-    const quantity = parseFloat(String(row.Quantity || row.quantity || row.Qty || '0'));
-    const buyPrice = parseFloat(String(row['Buy Price'] || row['Buy price'] || row['Avg Buy Price'] || '0'));
-    const sellPrice = parseFloat(String(row['Sell Price'] || row['Sell price'] || row['Avg Sell Price'] || '0'));
-    const buyValue = parseFloat(String(row['Buy Value'] || row['buy_value'] || '0'));
-    const sellValue = parseFloat(String(row['Sell Value'] || row['sell_value'] || '0'));
-    const pnl = parseFloat(String(row['Realized P&L'] || row['Realised P&L'] || row['P&L'] || '0'));
+    // Extract numeric values with fallbacks for different formats
+    const quantity = parseFloat(String(
+      row['Quantity'] || row['quantity'] || row['Qty'] || 
+      row['__EMPTY_2'] || row['__EMPTY_3'] || '0'
+    ));
+    
+    const buyPrice = parseFloat(String(
+      row['Buy Price'] || row['Buy price'] || row['Avg Buy Price'] || 
+      row['trade_price'] || row['Price'] || '0'
+    ));
+    
+    const sellPrice = parseFloat(String(
+      row['Sell Price'] || row['Sell price'] || row['Avg Sell Price'] || 
+      row['sell_price'] || '0'
+    ));
+    
+    const buyValue = parseFloat(String(
+      row['Buy Value'] || row['buy_value'] || '0'
+    ));
+    
+    const sellValue = parseFloat(String(
+      row['Sell Value'] || row['sell_value'] || '0'
+    ));
+    
+    const pnl = parseFloat(String(
+      row['Realized P&L'] || row['Realised P&L'] || 
+      row['P&L'] || row['pnl'] || '0'
+    ));
 
-    // Calculate prices from values if needed
+    // Calculate prices from values if available
     let finalBuyPrice = buyPrice;
     let finalSellPrice = sellPrice;
+    
     if (buyValue > 0 && quantity > 0 && buyPrice === 0) {
       finalBuyPrice = buyValue / quantity;
     }
@@ -84,24 +140,34 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
       finalSellPrice = sellValue / quantity;
     }
 
-    if (quantity <= 0) {
-      issues.push('Invalid quantity');
+    // Validation checks
+    if (quantity <= 0 || isNaN(quantity)) {
+      issues.push('Invalid or missing quantity');
       valid = false;
     }
-    if (finalBuyPrice <= 0 && finalSellPrice <= 0) {
+    
+    if ((finalBuyPrice <= 0 || isNaN(finalBuyPrice)) && 
+        (finalSellPrice <= 0 || isNaN(finalSellPrice))) {
       issues.push('Missing price data');
       valid = false;
     }
 
-    // Determine category
+    // Determine category from symbol
     const symbolUpper = symbol.toUpperCase();
     let category = 'equity';
-    if (symbolUpper.includes('FUT') || symbolUpper.includes('FUTURE')) category = 'futures';
+    if (symbolUpper.includes('FUT') || symbolUpper.includes('FUTURE')) {
+      category = 'futures';
+    }
     if (symbolUpper.includes('CE') || symbolUpper.includes('PE') || 
-        symbolUpper.includes('CALL') || symbolUpper.includes('PUT')) category = 'options';
+        symbolUpper.includes('CALL') || symbolUpper.includes('PUT') ||
+        /\d{2}\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+\d{2}/.test(symbolUpper)) {
+      category = 'options';
+    }
 
-    // Determine broker
-    const broker = row.broker || 'unknown';
+    // Try to detect broker
+    let broker = 'unknown';
+    if (Object.keys(row).some(key => key.includes('Groww'))) broker = 'groww';
+    if (Object.keys(row).some(key => key.includes('Zerodha'))) broker = 'zerodha';
 
     return {
       valid,

@@ -67,14 +67,15 @@ Deno.serve(async (req) => {
     // Try to access Zerodha's public endpoint to verify API key format
     const testUrl = `https://kite.zerodha.com/connect/login?api_key=${apiKey}`;
     const response = await fetch(testUrl, {
-      method: 'HEAD',
+      method: 'GET',
       redirect: 'manual' // Don't follow redirects
     });
 
     console.log('Test response status:', response.status);
 
     // If we get a redirect or 200, the API key format is accepted
-    if (response.status === 200 || response.status === 302 || response.status === 301) {
+    // 405 means method not allowed but the endpoint exists with the API key
+    if (response.status === 200 || response.status === 302 || response.status === 301 || response.status === 405) {
       return new Response(
         JSON.stringify({ 
           valid: true, 

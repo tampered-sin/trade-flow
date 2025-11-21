@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.check-zerodha-tokens]
 verify_jwt = false
+
+[functions.test-zerodha-connection]
+verify_jwt = false

@@ -64,8 +64,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Processing ${trades.length} rows from Zerodha file`);
-    console.log('First row sample:', trades[0]);
+    console.log(`Processing ${trades.length} rows from Groww file`);
 
     // Get existing trades to avoid duplicates
     const { data: existingTrades } = await supabase
@@ -96,101 +95,106 @@ Deno.serve(async (req) => {
       return 'equity';
     };
 
-    // Helper function to parse Zerodha P&L format
-    const parseZerodhaRow = (row: CSVRow): ParsedTrade | null => {
-      // Get symbol - must be a string, not just numbers
-      let symbol = '';
+    // Helper function to parse Groww date format
+    const parseDateString = (dateStr: string): string => {
+      if (!dateStr || dateStr.trim() === '') return '';
       
-      // Try named columns first
-      const namedSymbol = String(
-        row['Symbol'] || row['symbol'] || row['SYMBOL'] || 
-        row['scrip_name'] || row['Scrip Name'] || ''
+      // Format 1: DD-MM-YYYY (equity reports)
+      const ddmmyyyy = dateStr.match(/(\d{2})-(\d{2})-(\d{4})/);
+      if (ddmmyyyy) {
+        return `${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`;
+      }
+      
+      // Format 2: DD MMM YYYY (F&O reports)
+      const ddmmmyyyy = dateStr.match(/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/);
+      if (ddmmmyyyy) {
+        const monthMap: { [key: string]: string } = {
+          'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
+          'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+        };
+        const day = ddmmmyyyy[1].padStart(2, '0');
+        const month = monthMap[ddmmmyyyy[2]];
+        return `${ddmmmyyyy[3]}-${month}-${day}`;
+      }
+      
+      return dateStr;
+    };
+
+    // Parse Groww format
+    const parseGrowwRow = (row: CSVRow): ParsedTrade | null => {
+      // Extract symbol - Groww uses "Stock name" column
+      const symbol = String(
+        row['Stock name'] || 
+        row['Name'] || 
+        row['Scrip Name'] || 
+        row['Symbol'] || 
+        ''
       ).trim();
       
-      // Check if it's a valid symbol (has letters, not just numbers)
-      if (namedSymbol && /[A-Za-z]/.test(namedSymbol)) {
-        symbol = namedSymbol;
-      }
-      
-      // If not found, try __EMPTY columns but validate they contain letters
-      if (!symbol) {
-        const possibleSymbols = [
-          row['__EMPTY'], row['__EMPTY_0'], row['__EMPTY_1']
-        ];
-        
-        for (const col of possibleSymbols) {
-          const val = String(col || '').trim();
-          // Must have letters and not be too short
-          if (val && /[A-Za-z]{2,}/.test(val) && val.length >= 2) {
-            symbol = val;
-            break;
-          }
-        }
-      }
-      
-      // Skip if no valid symbol found or if it's a header/summary row
+      // Skip header/summary rows
       if (!symbol || 
+          symbol === 'Stock name' ||
+          symbol === 'Scrip Name' ||
           symbol.includes('Summary') || 
+          symbol.includes('Statement') || 
+          symbol.includes('Realised') ||
+          symbol.includes('Unrealised') ||
           symbol.includes('Charges') ||
-          symbol.includes('Client ID') ||
-          symbol.includes('P&L Statement') ||
-          symbol.includes('Other Debits') ||
-          symbol.includes('View Zerodha') ||
-          symbol.includes('Account Head') ||
-          symbol.includes('Particulars') ||
-          symbol === 'ISIN' ||
-          symbol === 'Symbol' ||
-          /^\d+$/.test(symbol)) { // Skip if it's only numbers
+          symbol.includes('Total') ||
+          symbol.includes('Disclaimer') ||
+          symbol.includes('P&L') ||
+          symbol.includes('Exchange') ||
+          symbol.includes('SEBI') ||
+          symbol.includes('STT') ||
+          symbol.includes('Stamp') ||
+          symbol.includes('IPFT') ||
+          symbol.includes('Brokerage') ||
+          symbol.includes('GST') ||
+          symbol.includes('Unique Client') ||
+          symbol.includes('trades') ||
+          /^\d+$/.test(symbol)) {
         return null;
       }
 
-      // Get numeric columns - need to find them by position or name
-      const quantity = parseFloat(String(
-        row['Quantity'] || row['quantity'] || row['qty'] || 
-        row['__EMPTY_2'] || row['__EMPTY_3'] || '0'
-      ));
+      // Parse Groww specific columns
+      const quantity = parseFloat(String(row['Quantity'] || '0'));
+      const buyDateStr = String(row['Buy date'] || row['Buy Date'] || '').trim();
+      const sellDateStr = String(row['Sell date'] || row['Sell Date'] || '').trim();
+      const buyPrice = parseFloat(String(row['Buy price'] || row['Buy Price'] || row['Avg Buy Price'] || '0'));
+      const sellPrice = parseFloat(String(row['Sell price'] || row['Sell Price'] || row['Avg Sell Price'] || '0'));
+      const pnl = parseFloat(String(row['Realised P&L'] || row['Realized P&L'] || row['P&L'] || '0'));
+
+      const buyDate = parseDateString(buyDateStr);
+      const sellDate = parseDateString(sellDateStr);
       
-      const buyValue = parseFloat(String(
-        row['Buy Value'] || row['buy_value'] || 
-        row['__EMPTY_3'] || row['__EMPTY_4'] || '0'
-      ));
-      
-      const sellValue = parseFloat(String(
-        row['Sell Value'] || row['sell_value'] || 
-        row['__EMPTY_4'] || row['__EMPTY_5'] || '0'
-      ));
-      
-      const realizedPnL = parseFloat(String(
-        row['Realized P&L'] || row['Realised P&L'] || 
-        row['pnl'] || row['P&L'] || row['profit_loss'] ||
-        row['__EMPTY_5'] || row['__EMPTY_6'] || '0'
-      ));
-      
-      // P&L Report format (aggregate data with buy/sell values)
-      if (buyValue > 0 && sellValue > 0 && quantity > 0) {
-        const avgBuyPrice = buyValue / quantity;
-        const avgSellPrice = sellValue / quantity;
-        
+      // Use buy date if available, otherwise sell date
+      const tradeDate = buyDate || sellDate;
+
+      // Skip rows with invalid data
+      if (!tradeDate || tradeDate === '' || tradeDate.length < 8) {
+        return null;
+      }
+
+      if (!symbol || !quantity || (buyPrice === 0 && sellPrice === 0)) {
+        return null;
+      }
+
       return {
         symbol,
-        tradeDate: new Date().toISOString().split('T')[0],
+        tradeDate,
         quantity,
-        buyPrice: avgBuyPrice,
-        sellPrice: avgSellPrice,
-        pnl: realizedPnL,
-        tradeType: 'both',
+        buyPrice,
+        sellPrice,
+        pnl,
+        tradeType: buyPrice > 0 && sellPrice > 0 ? 'both' : 'unknown',
         category: determineCategory(symbol),
       };
-    }
-
-    return null;
     };
-
 
     for (let i = 0; i < (trades as CSVRow[]).length; i++) {
       const row = (trades as CSVRow[])[i];
       try {
-        const parsedTrade = parseZerodhaRow(row);
+        const parsedTrade = parseGrowwRow(row);
 
         if (!parsedTrade) {
           // Skip silently for header/summary rows
@@ -199,7 +203,7 @@ Deno.serve(async (req) => {
 
         const { symbol, tradeDate, quantity, buyPrice, sellPrice, pnl, tradeType, category } = parsedTrade;
 
-        // Use buy price for entry, or sell price if no buy price (for short trades)
+        // Use buy price for entry, or sell price if no buy price
         const entryPrice = buyPrice > 0 ? buyPrice : sellPrice;
         
         const tradeKey = `${symbol}_${tradeDate}_${entryPrice}_${quantity}`;
@@ -220,12 +224,10 @@ Deno.serve(async (req) => {
         let positionType = 'long';
         if (tradeType === 'both') {
           positionType = buyPrice < sellPrice ? 'long' : 'short';
-        } else if (tradeType.includes('sell') || tradeType.includes('short')) {
-          positionType = 'short';
         }
 
         // Create tags array with category and broker
-        const tags = [category, 'zerodha'];
+        const tags = [category, 'groww'];
         if (category === 'futures') tags.push('f&o');
         if (category === 'options') tags.push('f&o');
 
@@ -239,7 +241,7 @@ Deno.serve(async (req) => {
           position_type: positionType,
           profit_loss: hasPnL ? pnl : null,
           tags: tags,
-          notes: `Imported from Zerodha\nCategory: ${category}\nBuy: ${buyPrice || 'N/A'} | Sell: ${sellPrice || 'N/A'}`,
+          notes: `Imported from Groww\nCategory: ${category}\nBuy: ${buyPrice || 'N/A'} | Sell: ${sellPrice || 'N/A'}`,
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -284,7 +286,7 @@ Deno.serve(async (req) => {
       throw insertError;
     }
 
-    console.log(`Successfully imported ${transformedTrades.length} Zerodha trades`);
+    console.log(`Successfully imported ${transformedTrades.length} Groww trades`);
 
     return new Response(
       JSON.stringify({ 
@@ -305,7 +307,7 @@ Deno.serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Error importing Zerodha CSV:', error);
+    console.error('Error importing Groww CSV:', error);
     return new Response(
       JSON.stringify({ 
         success: false, 

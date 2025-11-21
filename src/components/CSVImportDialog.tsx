@@ -294,9 +294,10 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
         return;
       }
 
-      // Send to backend with format
-      const { data, error } = await supabase.functions.invoke('import-zerodha-csv', {
-        body: { trades: selectedTrades, format: selectedFormat },
+      // Send to correct backend function based on format
+      const functionName = selectedFormat === 'groww' ? 'import-groww-csv' : 'import-zerodha-csv';
+      const { data, error } = await supabase.functions.invoke(functionName, {
+        body: { trades: selectedTrades },
       });
 
       if (error) throw error;

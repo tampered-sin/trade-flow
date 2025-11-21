@@ -119,10 +119,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch completed orders from Zerodha API
+    // Fetch completed orders from Zerodha API (only today's orders)
     const zerodhaTrades = await fetchZerodhaOrders(api_key, access_token);
     
     console.log(`Fetched ${zerodhaTrades.length} completed orders from Zerodha`);
+    
+    // Note: Zerodha's /orders API only returns TODAY's orders
+    // For historical data, users need to download their tradebook report
 
     // Try to fetch P&L data from positions
     let positionsMap: Map<string, number> = new Map();
@@ -252,6 +255,8 @@ Deno.serve(async (req) => {
 async function fetchZerodhaOrders(apiKey: string, accessToken: string): Promise<ZerodhaOrder[]> {
   const url = 'https://api.kite.trade/orders';
   
+  console.log('Calling Zerodha orders API...');
+  
   const response = await fetch(url, {
     method: 'GET',
     headers: {
@@ -268,11 +273,19 @@ async function fetchZerodhaOrders(apiKey: string, accessToken: string): Promise<
 
   const result = await response.json();
   
+  console.log('Zerodha API response status:', result.status);
+  console.log('Total orders returned:', result.data?.length || 0);
+  
   if (result.status !== 'success') {
     throw new Error('Zerodha API returned error status');
   }
 
   const allOrders = result.data || [];
+  
+  // Log a sample order to see the structure
+  if (allOrders.length > 0) {
+    console.log('Sample order:', JSON.stringify(allOrders[0]));
+  }
   
   // Filter for only COMPLETE orders with filled quantity
   const completedOrders = allOrders.filter((order: ZerodhaOrder) => 

@@ -44,20 +44,20 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar>
+    <Sidebar className="border-r shadow-sm">
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
+          <SidebarGroupContent className="px-2 py-4">
+            <SidebarMenu className="space-y-2">
               {menuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink
                       to={item.url}
-                      className="hover:bg-sidebar-accent"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                      className="hover:bg-primary/5 rounded-lg transition-colors"
+                      activeClassName="bg-primary/10 text-primary font-semibold border-l-2 border-primary"
                     >
-                      <item.icon className="h-4 w-4" />
+                      <item.icon className="h-5 w-5" />
                       {state === "expanded" && <span>{item.title}</span>}
                     </NavLink>
                   </SidebarMenuButton>
@@ -67,11 +67,14 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="p-2">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleSignOut} className="hover:bg-sidebar-accent">
-              <LogOut className="h-4 w-4" />
+            <SidebarMenuButton 
+              onClick={handleSignOut} 
+              className="hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors"
+            >
+              <LogOut className="h-5 w-5" />
               {state === "expanded" && <span>Sign Out</span>}
             </SidebarMenuButton>
           </SidebarMenuItem>

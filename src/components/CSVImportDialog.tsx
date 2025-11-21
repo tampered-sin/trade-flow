@@ -63,7 +63,7 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
     // Extract symbol based on format
     let symbol = '';
     if (format === 'groww') {
-      symbol = String(row['Stock name'] || row['Name'] || row['Scrip Name'] || '').trim();
+      symbol = String(row['Stock name'] || row['Name'] || row['Scrip Name'] || row['Symbol'] || '').trim();
     } else {
       // For Zerodha, check multiple possible column names
       symbol = String(
@@ -75,35 +75,35 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
       ).trim();
     }
 
-    // Skip header/summary rows and invalid symbols
+    // Skip only obvious header/summary rows
     const isHeaderRow = !symbol || 
         symbol === 'Symbol' ||
         symbol === 'Stock name' ||
+        symbol === 'Scrip Name' ||
         symbol.includes('Summary') || 
         symbol.includes('Statement') ||
-        symbol.includes('Realised') ||
-        symbol.includes('Unrealised') ||
         symbol.includes('Charges') ||
         symbol.includes('Total') ||
-        symbol.includes('P&L') ||
         symbol.includes('Exchange') ||
         symbol.includes('SEBI') ||
-        symbol.includes('STT') ||
-        symbol.includes('Stamp') ||
-        symbol.includes('IPFT') ||
         symbol.includes('Brokerage') ||
-        symbol.includes('GST') ||
         symbol.includes('Unique Client') ||
         symbol.includes('Particulars') ||
-        /^\d+$/.test(symbol) ||
-        !(/[A-Za-z]{2,}/.test(symbol)); // Must have at least 2 letters
+        symbol.includes('Client ID') ||
+        /^\d+$/.test(symbol); // Skip if only numbers
     
     if (isHeaderRow) {
-      issues.push('Invalid or missing symbol');
+      issues.push('Header or summary row');
       valid = false;
     }
 
-    // Extract numeric values based on format
+    // Basic check for symbol validity (has letters)
+    if (symbol && !isHeaderRow && !/[A-Za-z]{2,}/.test(symbol)) {
+      issues.push('Invalid symbol format');
+      valid = false;
+    }
+
+    // Extract numeric values based on format (simple extraction, backend will validate)
     let quantity = 0;
     let buyPrice = 0;
     let sellPrice = 0;
@@ -114,8 +114,14 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
       buyPrice = parseFloat(String(row['Buy price'] || row['Buy Price'] || row['Avg Buy Price'] || '0'));
       sellPrice = parseFloat(String(row['Sell price'] || row['Sell Price'] || row['Avg Sell Price'] || '0'));
       pnl = parseFloat(String(row['Realised P&L'] || row['Realized P&L'] || row['P&L'] || '0'));
+      
+      // For Groww, we need at least quantity or prices to consider it valid data
+      if (!isHeaderRow && quantity === 0 && buyPrice === 0 && sellPrice === 0) {
+        valid = false;
+        issues.push('No trade data');
+      }
     } else {
-      // Zerodha format - check multiple column name variations
+      // Zerodha format
       quantity = parseFloat(String(
         row['Quantity'] || 
         row['quantity'] || 
@@ -158,15 +164,12 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
         row['REALIZED P&L'] ||
         '0'
       ));
-    }
-
-    if (quantity <= 0) {
-      issues.push('Invalid quantity');
-      valid = false;
-    }
-    if (buyPrice <= 0 && sellPrice <= 0) {
-      issues.push('Missing price data');
-      valid = false;
+      
+      // For Zerodha, check if we have basic trade data
+      if (!isHeaderRow && quantity === 0 && buyValue === 0 && sellValue === 0) {
+        valid = false;
+        issues.push('No trade data');
+      }
     }
 
     // Determine category
@@ -235,20 +238,22 @@ export function CSVImportDialog({ open, onOpenChange }: CSVImportDialogProps) {
       // Parse and validate each row with selected format
       const parsed = parsedData.map((row, idx) => validateAndParseRow(row, idx, selectedFormat!));
       
-      console.log('Sample parsed rows:', parsed.slice(0, 5));
+      console.log('Sample parsed rows:', parsed.slice(0, 10));
       console.log('First data row keys:', Object.keys(parsedData[0] || {}));
+      console.log('Valid count:', parsed.filter(p => p.valid).length);
       
-      // Filter out completely empty rows
-      const filteredParsed = parsed.filter(p => 
-        p.symbol || p.quantity > 0 || p.buyPrice > 0 || p.sellPrice > 0
-      );
+      // Don't filter too aggressively - just remove completely empty rows
+      const filteredParsed = parsed.filter(p => {
+        // Keep the row if it has any meaningful data
+        return p.symbol || p.quantity > 0 || p.buyPrice > 0 || p.sellPrice > 0;
+      });
 
       console.log(`Parsed ${parsed.length} rows, filtered to ${filteredParsed.length} non-empty rows`);
 
-      const rowsToUse = filteredParsed.length > 0 ? filteredParsed : parsed;
+      const rowsToUse = filteredParsed.length > 0 ? filteredParsed : [];
 
       if (rowsToUse.length === 0) {
-        throw new Error('No valid data found in the file. Please ensure the file contains trade data with Symbol, Quantity, Buy Value, and Sell Value columns.');
+        throw new Error(`No valid data found in the file. Please ensure the file contains ${selectedFormat === 'groww' ? 'Groww' : 'Zerodha'} format with trade data.`);
       }
 
       // Auto-select valid rows

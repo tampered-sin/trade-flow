@@ -5,6 +5,7 @@ import { TrendingUp, TrendingDown, Activity, DollarSign, Calculator, RefreshCw, 
 import { PositionSizeCalculator } from "@/components/PositionSizeCalculator";
 import { SyncReportDialog } from "@/components/SyncReportDialog";
 import { CSVImportDialog } from "@/components/CSVImportDialog";
+import { PLCalendarWidget } from "@/components/PLCalendarWidget";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrency";
@@ -342,6 +343,8 @@ const Dashboard = () => {
       </div>
 
       {/* Charts Section */}
+      <PLCalendarWidget />
+
       {profitTrendData.length > 0 && (
         <div className="grid gap-6 lg:grid-cols-2">
           <Card className="border-none shadow-lg">

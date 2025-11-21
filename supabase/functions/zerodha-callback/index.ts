@@ -12,16 +12,17 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const url = new URL(req.url);
-    const requestToken = url.searchParams.get('request_token');
-    const status = url.searchParams.get('status');
+    // Read request token from request body (sent by ZerodhaCallback component)
+    const body = await req.json();
+    const requestToken = body.request_token;
+    const status = body.status;
 
     console.log('OAuth callback received:', { requestToken, status });
 
     if (status === 'error' || !requestToken) {
       return new Response(
-        `<html><body><script>window.opener.postMessage({ type: 'zerodha-auth-error', error: 'Authorization failed' }, '*'); window.close();</script></body></html>`,
-        { headers: { ...corsHeaders, 'Content-Type': 'text/html' } }
+        JSON.stringify({ success: false, error: 'Authorization failed' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
@@ -29,8 +30,8 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(
-        `<html><body><script>window.opener.postMessage({ type: 'zerodha-auth-error', error: 'Not authenticated' }, '*'); window.close();</script></body></html>`,
-        { headers: { ...corsHeaders, 'Content-Type': 'text/html' } }
+        JSON.stringify({ success: false, error: 'Not authenticated' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
       );
     }
 
@@ -45,8 +46,8 @@ Deno.serve(async (req) => {
     if (userError || !user) {
       console.error('User authentication error:', userError);
       return new Response(
-        `<html><body><script>window.opener.postMessage({ type: 'zerodha-auth-error', error: 'User not found' }, '*'); window.close();</script></body></html>`,
-        { headers: { ...corsHeaders, 'Content-Type': 'text/html' } }
+        JSON.stringify({ success: false, error: 'User not found' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
       );
     }
 
@@ -62,8 +63,8 @@ Deno.serve(async (req) => {
     if (credError || !credentials) {
       console.error('Credentials fetch error:', credError);
       return new Response(
-        `<html><body><script>window.opener.postMessage({ type: 'zerodha-auth-error', error: 'API credentials not found. Please set up your API key first.' }, '*'); window.close();</script></body></html>`,
-        { headers: { ...corsHeaders, 'Content-Type': 'text/html' } }
+        JSON.stringify({ success: false, error: 'API credentials not found. Please set up your API key first.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
@@ -73,8 +74,8 @@ Deno.serve(async (req) => {
     if (!api_secret) {
       console.error('API secret is required but not found');
       return new Response(
-        `<html><body><script>window.opener.postMessage({ type: 'zerodha-auth-error', error: 'API secret is required. Please add it in settings.' }, '*'); window.close();</script></body></html>`,
-        { headers: { ...corsHeaders, 'Content-Type': 'text/html' } }
+        JSON.stringify({ success: false, error: 'API secret is required. Please add it in settings.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
@@ -107,8 +108,8 @@ Deno.serve(async (req) => {
     if (!tokenResponse.ok || tokenData.status === 'error') {
       console.error('Token exchange failed:', tokenData);
       return new Response(
-        `<html><body><script>window.opener.postMessage({ type: 'zerodha-auth-error', error: '${tokenData.message || 'Failed to exchange token'}' }, '*'); window.close();</script></body></html>`,
-        { headers: { ...corsHeaders, 'Content-Type': 'text/html' } }
+        JSON.stringify({ success: false, error: tokenData.message || 'Failed to exchange token' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
@@ -127,24 +128,24 @@ Deno.serve(async (req) => {
     if (updateError) {
       console.error('Database update error:', updateError);
       return new Response(
-        `<html><body><script>window.opener.postMessage({ type: 'zerodha-auth-error', error: 'Failed to store credentials' }, '*'); window.close();</script></body></html>`,
-        { headers: { ...corsHeaders, 'Content-Type': 'text/html' } }
+        JSON.stringify({ success: false, error: 'Failed to store credentials' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       );
     }
 
     console.log('Successfully stored access token for user:', user.id);
 
-    // Success - close window and notify parent
+    // Success response
     return new Response(
-      `<html><body><script>window.opener.postMessage({ type: 'zerodha-auth-success' }, '*'); window.close();</script></body></html>`,
-      { headers: { ...corsHeaders, 'Content-Type': 'text/html' } }
+      JSON.stringify({ success: true, message: 'Successfully connected to Zerodha' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('OAuth callback error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
-      `<html><body><script>window.opener.postMessage({ type: 'zerodha-auth-error', error: '${errorMessage}' }, '*'); window.close();</script></body></html>`,
-      { headers: { ...corsHeaders, 'Content-Type': 'text/html' } }
+      JSON.stringify({ success: false, error: errorMessage }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
 });

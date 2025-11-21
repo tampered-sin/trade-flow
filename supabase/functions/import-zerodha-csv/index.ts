@@ -68,21 +68,79 @@ Deno.serve(async (req) => {
 
     for (const row of trades as CSVRow[]) {
       try {
-        // Parse row - supports various Zerodha CSV/Excel formats
-        const symbol = row['symbol'] || row['Symbol'] || row['SYMBOL'] || '';
-        const tradeDate = row['trade_date'] || row['Trade date'] || row['Date'] || '';
-        const quantity = parseFloat(row['quantity'] || row['Quantity'] || row['qty'] || '0');
-        const price = parseFloat(row['trade_price'] || row['Price'] || row['price'] || '0');
-        const tradeType = (row['trade_type'] || row['Type'] || row['type'] || '').toLowerCase();
-        const pnl = parseFloat(row['pnl'] || row['P&L'] || row['profit_loss'] || '0');
+        // Handle different Excel formats
+        let symbol = '';
+        let tradeDate = '';
+        let quantity = 0;
+        let buyPrice = 0;
+        let sellPrice = 0;
+        let pnl = 0;
+        let tradeType = '';
 
-        if (!symbol || !tradeDate || !quantity || !price) {
-          console.log('Skipping invalid row:', row);
+        // Check if it's Groww P&L format (uses "Name" for symbol and dynamic user column)
+        if (row['Name'] || row['Scrip Name']) {
+          symbol = row['Name'] || row['Scrip Name'] || '';
+          
+          // Skip header/summary rows
+          if (!symbol || 
+              symbol.includes('Summary') || 
+              symbol.includes('Statement') || 
+              symbol.includes('Realised') ||
+              symbol.includes('Charges') ||
+              symbol.includes('Total') ||
+              symbol.includes('Disclaimer') ||
+              symbol.includes('Exchange') ||
+              symbol.includes('SEBI') ||
+              symbol.includes('STT') ||
+              symbol.includes('Stamp') ||
+              symbol.includes('IPFT') ||
+              symbol.includes('Brokerage') ||
+              symbol.includes('GST') ||
+              symbol.includes('Futures') ||
+              symbol.includes('Options') ||
+              symbol.includes('Unique Client')) {
+            console.log('Skipping header/summary row:', symbol);
+            continue;
+          }
+
+          // Find the quantity column (could be user name or "Quantity")
+          const userNameKey = Object.keys(row).find(key => 
+            key !== 'Name' && 
+            key !== 'Scrip Name' && 
+            key !== '__EMPTY' && 
+            !key.startsWith('__EMPTY_') &&
+            !isNaN(parseFloat(row[key]))
+          );
+          
+          quantity = parseFloat(userNameKey ? row[userNameKey] : row['Quantity'] || '0');
+          tradeDate = row['__EMPTY'] || row['Buy Date'] || row['Date'] || '';
+          buyPrice = parseFloat(row['__EMPTY_1'] || row['Buy Price'] || '0');
+          sellPrice = parseFloat(row['__EMPTY_4'] || row['Sell Price'] || '0');
+          pnl = parseFloat(row['__EMPTY_6'] || row['Realized P&L'] || row['P&L'] || '0');
+          
+          // Determine trade type based on having buy/sell prices
+          tradeType = buyPrice > 0 && sellPrice > 0 ? 'both' : 'unknown';
+        } else {
+          // Standard Zerodha CSV format
+          symbol = row['symbol'] || row['Symbol'] || row['SYMBOL'] || '';
+          tradeDate = row['trade_date'] || row['Trade date'] || row['Date'] || '';
+          quantity = parseFloat(row['quantity'] || row['Quantity'] || row['qty'] || '0');
+          buyPrice = parseFloat(row['trade_price'] || row['Price'] || row['price'] || '0');
+          tradeType = (row['trade_type'] || row['Type'] || row['type'] || '').toLowerCase();
+          pnl = parseFloat(row['pnl'] || row['P&L'] || row['profit_loss'] || '0');
+        }
+
+        // Validate required fields
+        if (!symbol || !tradeDate || !quantity || (buyPrice === 0 && sellPrice === 0)) {
+          console.log('Skipping invalid row - missing required fields:', { symbol, tradeDate, quantity, buyPrice, sellPrice });
           errors++;
           continue;
         }
 
-        const tradeKey = `${symbol}_${tradeDate}_${price}_${quantity}`;
+        // Use buy price for entry, or sell price if no buy price (for short trades)
+        const entryPrice = buyPrice > 0 ? buyPrice : sellPrice;
+        
+        const tradeKey = `${symbol}_${tradeDate}_${entryPrice}_${quantity}`;
         if (existingTradeKeys.has(tradeKey)) {
           skipped++;
           continue;
@@ -95,15 +153,25 @@ Deno.serve(async (req) => {
           withoutPnL++;
         }
 
+        // Determine position type: if we have both buy and sell, it's a completed trade
+        let positionType = 'long';
+        if (tradeType === 'both') {
+          // For completed trades with P&L, determine type from P&L and prices
+          positionType = buyPrice < sellPrice ? 'long' : 'short';
+        } else if (tradeType.includes('sell') || tradeType.includes('short')) {
+          positionType = 'short';
+        }
+
         transformedTrades.push({
           user_id: user.id,
           symbol: symbol.trim(),
           entry_date: tradeDate,
-          entry_price: price,
+          entry_price: entryPrice,
+          exit_price: buyPrice > 0 && sellPrice > 0 ? sellPrice : null,
           position_size: Math.abs(quantity),
-          position_type: tradeType.includes('buy') ? 'long' : 'short',
+          position_type: positionType,
           profit_loss: hasPnL ? pnl : null,
-          notes: `Imported from Zerodha file\nTrade Type: ${tradeType}`,
+          notes: `Imported from Groww/Zerodha file\nBuy Price: ${buyPrice}\nSell Price: ${sellPrice}`,
         });
       } catch (error) {
         console.error('Error processing row:', error, row);

@@ -20,9 +20,10 @@ interface SyncReportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   report: SyncReport | null;
+  title?: string;
 }
 
-export const SyncReportDialog = ({ open, onOpenChange, report }: SyncReportDialogProps) => {
+export const SyncReportDialog = ({ open, onOpenChange, report, title = "Sync Report" }: SyncReportDialogProps) => {
   if (!report) return null;
 
   return (
@@ -31,7 +32,7 @@ export const SyncReportDialog = ({ open, onOpenChange, report }: SyncReportDialo
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CheckCircle className="h-5 w-5 text-success" />
-            Sync Report
+            {title}
           </DialogTitle>
           <DialogDescription>
             Summary of trades synchronized from Zerodha

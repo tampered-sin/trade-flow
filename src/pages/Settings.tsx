@@ -38,6 +38,7 @@ const Settings = () => {
       if (data) {
         setCredentials(data);
         setApiKey(data.api_key);
+        setApiSecret(data.api_secret || "");
         setIsConnected(!!data.access_token);
         
         // Check if token is expired
@@ -107,6 +108,15 @@ const Settings = () => {
       toast({
         title: "Error",
         description: "Please save your API key first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!apiSecret.trim()) {
+      toast({
+        title: "Error",
+        description: "API secret is required for OAuth connection. Please save it first.",
         variant: "destructive",
       });
       return;
@@ -263,7 +273,7 @@ const Settings = () => {
 
           {/* API Secret Input */}
           <div className="space-y-2">
-            <Label htmlFor="apiSecret">API Secret (Optional)</Label>
+            <Label htmlFor="apiSecret">API Secret</Label>
             <Input
               id="apiSecret"
               type="password"
@@ -271,6 +281,9 @@ const Settings = () => {
               onChange={(e) => setApiSecret(e.target.value)}
               placeholder="Enter your Zerodha API secret"
             />
+            <p className="text-sm text-muted-foreground">
+              Required for OAuth connection. Keep this secure.
+            </p>
           </div>
 
           {/* Test Result */}
@@ -309,7 +322,7 @@ const Settings = () => {
             {!isConnected || tokenExpired ? (
               <Button
                 onClick={handleConnectZerodha}
-                disabled={loading || testingConnection || !apiKey}
+                disabled={loading || testingConnection || !apiKey || !apiSecret}
                 variant="outline"
               >
                 {tokenExpired ? 'Reconnect to Zerodha' : 'Connect to Zerodha'}
@@ -330,8 +343,9 @@ const Settings = () => {
             <h3 className="font-semibold mb-2">Setup Instructions:</h3>
             <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
               <li>Create an app on Zerodha Kite Connect developer portal</li>
-              <li>Copy your API key and paste it above</li>
+              <li>Copy your API key and API secret and paste them above</li>
               <li>Set redirect URL to: <code className="text-xs bg-background px-1 py-0.5 rounded">{window.location.origin}/auth/zerodha/callback</code></li>
+              <li>Save your API credentials</li>
               <li>Click "Connect to Zerodha" to authorize access</li>
               <li>You'll be redirected back after authorization</li>
             </ol>

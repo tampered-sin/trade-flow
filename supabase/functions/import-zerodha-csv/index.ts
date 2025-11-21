@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Processing ${trades.length} rows from CSV`);
+    console.log(`Processing ${trades.length} rows from uploaded file (CSV/Excel)`);
 
     // Get existing trades to avoid duplicates
     const { data: existingTrades } = await supabase
@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
 
     for (const row of trades as CSVRow[]) {
       try {
-        // Parse CSV row - supports various Zerodha CSV formats
+        // Parse row - supports various Zerodha CSV/Excel formats
         const symbol = row['symbol'] || row['Symbol'] || row['SYMBOL'] || '';
         const tradeDate = row['trade_date'] || row['Trade date'] || row['Date'] || '';
         const quantity = parseFloat(row['quantity'] || row['Quantity'] || row['qty'] || '0');
@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
           position_size: Math.abs(quantity),
           position_type: tradeType.includes('buy') ? 'long' : 'short',
           profit_loss: hasPnL ? pnl : null,
-          notes: `Imported from Zerodha CSV\nTrade Type: ${tradeType}`,
+          notes: `Imported from Zerodha file\nTrade Type: ${tradeType}`,
         });
       } catch (error) {
         console.error('Error processing row:', error, row);
@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
       throw insertError;
     }
 
-    console.log(`Successfully imported ${transformedTrades.length} trades from CSV`);
+    console.log(`Successfully imported ${transformedTrades.length} trades from uploaded file`);
 
     return new Response(
       JSON.stringify({ 

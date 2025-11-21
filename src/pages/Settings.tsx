@@ -14,6 +14,7 @@ const Settings = () => {
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
   const [isConnected, setIsConnected] = useState(false);
+  const [tokenExpired, setTokenExpired] = useState(false);
 
   useEffect(() => {
     fetchCredentials();
@@ -36,6 +37,12 @@ const Settings = () => {
         setCredentials(data);
         setApiKey(data.api_key);
         setIsConnected(!!data.access_token);
+        
+        // Check if token is expired
+        if (data.token_expires_at) {
+          const expiresAt = new Date(data.token_expires_at);
+          setTokenExpired(expiresAt < new Date());
+        }
       }
     } catch (error) {
       console.error("Error fetching credentials:", error);
@@ -152,9 +159,20 @@ const Settings = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Token Expiry Warning */}
+          {tokenExpired && isConnected && (
+            <div className="flex items-center gap-2 p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+              <XCircle className="text-destructive h-5 w-5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium text-destructive">Token Expired</p>
+                <p className="text-sm text-muted-foreground">Your Zerodha access token has expired. Please reconnect to continue syncing trades.</p>
+              </div>
+            </div>
+          )}
+
           {/* Connection Status */}
           <div className="flex items-center gap-2 p-4 rounded-lg bg-muted">
-            {isConnected ? (
+            {isConnected && !tokenExpired ? (
               <>
                 <CheckCircle className="text-green-500 h-5 w-5" />
                 <span className="font-medium">Connected to Zerodha</span>
@@ -212,13 +230,13 @@ const Settings = () => {
               Save API Credentials
             </Button>
 
-            {!isConnected ? (
+            {!isConnected || tokenExpired ? (
               <Button
                 onClick={handleConnectZerodha}
                 disabled={loading || !apiKey}
                 variant="outline"
               >
-                Connect to Zerodha
+                {tokenExpired ? 'Reconnect to Zerodha' : 'Connect to Zerodha'}
               </Button>
             ) : (
               <Button

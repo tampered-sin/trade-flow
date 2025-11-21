@@ -153,46 +153,52 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-        <p className="text-muted-foreground">Your trading performance overview</p>
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-4xl font-bold tracking-tight">Dashboard</h2>
+          <p className="text-muted-foreground mt-1">Track your trading performance</p>
+        </div>
       </div>
 
       {/* Trading Tools Section */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setShowCalculator(true)}>
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="cursor-pointer border-none shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]" onClick={() => setShowCalculator(true)}>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calculator className="h-5 w-5 text-primary" />
+            <CardTitle className="flex items-center gap-3 text-xl">
+              <div className="p-3 gradient-primary rounded-xl">
+                <Calculator className="h-6 w-6 text-white" />
+              </div>
               Position Size & Risk Calculator
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground leading-relaxed">
               Calculate optimal position size based on account balance, risk percentage, and stop loss distance. Includes risk-reward ratio analysis.
             </p>
-            <Button variant="outline" className="mt-4 w-full" onClick={(e) => { e.stopPropagation(); setShowCalculator(true); }}>
+            <Button variant="outline" className="mt-6 w-full border-primary/20 hover:bg-primary/5" onClick={(e) => { e.stopPropagation(); setShowCalculator(true); }}>
               Open Calculator
             </Button>
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:bg-accent/50 transition-colors">
+        <Card className="cursor-pointer border-none shadow-lg transition-all hover:shadow-xl hover:scale-[1.02]">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <RefreshCw className={`h-5 w-5 text-primary ${syncing ? 'animate-spin' : ''}`} />
+            <CardTitle className="flex items-center gap-3 text-xl">
+              <div className="p-3 gradient-primary rounded-xl">
+                <RefreshCw className={`h-6 w-6 text-white ${syncing ? 'animate-spin' : ''}`} />
+              </div>
               Sync & Import Trades
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground mb-4">
-              Import trades from Zerodha: sync today's orders via API or upload historical data via CSV.
+            <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
+              Import trades from Zerodha: sync today's orders via API or upload historical data via CSV/Excel.
             </p>
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               <Button 
                 variant="outline" 
-                className="flex-1" 
+                className="flex-1 border-primary/20 hover:bg-primary/5" 
                 onClick={handleSyncZerodha}
                 disabled={syncing}
               >
@@ -201,91 +207,104 @@ const Dashboard = () => {
               </Button>
               <Button 
                 variant="outline" 
-                className="flex-1"
+                className="flex-1 border-primary/20 hover:bg-primary/5"
                 onClick={() => setShowCSVImport(true)}
               >
                 <Upload className="mr-2 h-4 w-4" />
-                Import CSV
+                Import File
               </Button>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total P/L</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+      {/* Stats Overview - TradeZella Style */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="relative overflow-hidden border-none shadow-lg transition-shadow hover:shadow-xl">
+          <div className="absolute inset-0 gradient-card"></div>
+          <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total P/L</CardTitle>
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <DollarSign className="h-5 w-5 text-primary" />
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${stats.totalProfitLoss >= 0 ? 'text-success' : 'text-destructive'}`}>
+          <CardContent className="relative">
+            <div className={`text-3xl font-bold ${stats.totalProfitLoss >= 0 ? 'text-success' : 'text-destructive'}`}>
               {formatCurrency(stats.totalProfitLoss)}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground mt-2">
               {stats.totalTrades} trades completed
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Win Rate</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+        <Card className="relative overflow-hidden border-none shadow-lg transition-shadow hover:shadow-xl">
+          <div className="absolute inset-0 gradient-card"></div>
+          <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Win Rate</CardTitle>
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <Activity className="h-5 w-5 text-primary" />
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.winRate.toFixed(1)}%</div>
-            <p className="text-xs text-muted-foreground">Success percentage</p>
+          <CardContent className="relative">
+            <div className="text-3xl font-bold">{stats.winRate.toFixed(1)}%</div>
+            <p className="text-xs text-muted-foreground mt-2">Success percentage</p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Win</CardTitle>
-            <TrendingUp className="h-4 w-4 text-success" />
+        <Card className="relative overflow-hidden border-none shadow-lg transition-shadow hover:shadow-xl">
+          <div className="absolute inset-0 bg-success/5"></div>
+          <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Avg Win</CardTitle>
+            <div className="p-2 bg-success/10 rounded-lg">
+              <TrendingUp className="h-5 w-5 text-success" />
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-success">{formatCurrency(stats.avgWin)}</div>
-            <p className="text-xs text-muted-foreground">Per winning trade</p>
+          <CardContent className="relative">
+            <div className="text-3xl font-bold text-success">{formatCurrency(stats.avgWin)}</div>
+            <p className="text-xs text-muted-foreground mt-2">Per winning trade</p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Loss</CardTitle>
-            <TrendingDown className="h-4 w-4 text-destructive" />
+        <Card className="relative overflow-hidden border-none shadow-lg transition-shadow hover:shadow-xl">
+          <div className="absolute inset-0 bg-destructive/5"></div>
+          <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Avg Loss</CardTitle>
+            <div className="p-2 bg-destructive/10 rounded-lg">
+              <TrendingDown className="h-5 w-5 text-destructive" />
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-destructive">{formatCurrency(Math.abs(stats.avgLoss))}</div>
-            <p className="text-xs text-muted-foreground">Per losing trade</p>
+          <CardContent className="relative">
+            <div className="text-3xl font-bold text-destructive">{formatCurrency(Math.abs(stats.avgLoss))}</div>
+            <p className="text-xs text-muted-foreground mt-2">Per losing trade</p>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
+      <Card className="border-none shadow-lg">
         <CardHeader>
-          <CardTitle>Recent Trades</CardTitle>
+          <CardTitle className="text-xl">Recent Trades</CardTitle>
         </CardHeader>
         <CardContent>
           {recentTrades.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">
-              No trades yet. Add your first trade to get started!
-            </p>
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">No trades yet. Add your first trade to get started!</p>
+            </div>
           ) : (
             <div className="space-y-3">
               {recentTrades.map((trade) => (
                 <div
                   key={trade.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                  className="flex items-center justify-between p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
                 >
                   <div>
-                    <p className="font-medium">{trade.symbol}</p>
+                    <p className="font-semibold text-lg">{trade.symbol}</p>
                     <p className="text-sm text-muted-foreground">
                       {new Date(trade.entry_date).toLocaleDateString()}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className={`font-semibold ${trade.profit_loss && Number(trade.profit_loss) >= 0 ? 'text-success' : 'text-destructive'}`}>
+                    <p className={`font-bold text-lg ${trade.profit_loss && Number(trade.profit_loss) >= 0 ? 'text-success' : 'text-destructive'}`}>
                       {trade.profit_loss ? formatCurrency(Number(trade.profit_loss)) : '-'}
                     </p>
                     <p className="text-sm text-muted-foreground capitalize">{trade.position_type}</p>

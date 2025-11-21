@@ -153,41 +153,53 @@ Deno.serve(async (req) => {
     );
 
     // Transform and filter new trades
-    const newTrades = zerodhaTrades
-      .filter(zt => !existingTradeIds.has(zt.order_id))
-      .map(zt => {
-        // Try to get P&L for this order
-        const posKey = `${zt.tradingsymbol}_${zt.exchange}_${zt.product}`;
-        const pnl = positionsMap.get(posKey);
-        
-        return {
-          user_id: user.id,
-          symbol: zt.tradingsymbol,
-          entry_date: zt.order_timestamp,
-          entry_price: zt.average_price,
-          position_size: zt.filled_quantity,
-          position_type: zt.transaction_type === 'BUY' ? 'long' : 'short',
-          profit_loss: pnl || null,
-          notes: `Imported from Zerodha\nOrder ID: ${zt.order_id}\nExchange: ${zt.exchange}\nProduct: ${zt.product}\nStatus: ${zt.status}\nOrder Type: ${zt.order_type}`,
-        };
-      });
+    const transformedTrades = zerodhaTrades.map(zt => {
+      const posKey = `${zt.tradingsymbol}_${zt.exchange}_${zt.product}`;
+      const pnl = positionsMap.get(posKey);
+      
+      return {
+        order_id: zt.order_id,
+        user_id: user.id,
+        symbol: zt.tradingsymbol,
+        entry_date: zt.order_timestamp,
+        entry_price: zt.average_price,
+        position_size: zt.filled_quantity,
+        position_type: zt.transaction_type === 'BUY' ? 'long' : 'short',
+        profit_loss: pnl || null,
+        has_pnl: pnl !== null && pnl !== undefined,
+        notes: `Imported from Zerodha\nOrder ID: ${zt.order_id}\nExchange: ${zt.exchange}\nProduct: ${zt.product}\nStatus: ${zt.status}\nOrder Type: ${zt.order_type}`,
+      };
+    });
+
+    const newTrades = transformedTrades.filter(t => !existingTradeIds.has(t.order_id));
+    const skippedCount = transformedTrades.length - newTrades.length;
+    const tradesWithPnL = newTrades.filter(t => t.has_pnl).length;
+    const tradesWithoutPnL = newTrades.length - tradesWithPnL;
 
     if (newTrades.length === 0) {
       return new Response(
         JSON.stringify({ 
           success: true, 
           message: 'No new trades to sync',
-          synced: 0,
-          total: zerodhaTrades.length
+          report: {
+            totalFetched: zerodhaTrades.length,
+            imported: 0,
+            skipped: skippedCount,
+            withPnL: 0,
+            withoutPnL: 0
+          }
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // Remove has_pnl field before inserting
+    const tradesForInsert = newTrades.map(({ has_pnl, order_id, ...trade }) => trade);
+
     // Insert new trades
     const { data: insertedTrades, error: insertError } = await supabase
       .from('trades')
-      .insert(newTrades)
+      .insert(tradesForInsert)
       .select();
 
     if (insertError) {
@@ -201,8 +213,13 @@ Deno.serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         message: `Successfully synced ${newTrades.length} new trades`,
-        synced: newTrades.length,
-        total: zerodhaTrades.length,
+        report: {
+          totalFetched: zerodhaTrades.length,
+          imported: newTrades.length,
+          skipped: skippedCount,
+          withPnL: tradesWithPnL,
+          withoutPnL: tradesWithoutPnL
+        },
         trades: insertedTrades
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Activity, DollarSign, Calculator, RefreshCw } from "lucide-react";
 import { PositionSizeCalculator } from "@/components/PositionSizeCalculator";
+import { SyncReportDialog } from "@/components/SyncReportDialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
@@ -12,6 +13,14 @@ interface TradeStats {
   winRate: number;
   avgWin: number;
   avgLoss: number;
+}
+
+interface SyncReport {
+  totalFetched: number;
+  imported: number;
+  skipped: number;
+  withPnL: number;
+  withoutPnL: number;
 }
 
 const Dashboard = () => {
@@ -26,6 +35,8 @@ const Dashboard = () => {
   const [recentTrades, setRecentTrades] = useState<any[]>([]);
   const [showCalculator, setShowCalculator] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncReport, setSyncReport] = useState<SyncReport | null>(null);
+  const [showSyncReport, setShowSyncReport] = useState(false);
 
   useEffect(() => {
     fetchStats();
@@ -97,10 +108,17 @@ const Dashboard = () => {
       }
 
       if (data.success) {
+        // Show sync report
+        if (data.report) {
+          setSyncReport(data.report);
+          setShowSyncReport(true);
+        }
+        
         toast({
           title: "Success",
           description: data.message,
         });
+        
         // Refresh the dashboard data
         fetchStats();
         fetchRecentTrades();
@@ -272,6 +290,12 @@ const Dashboard = () => {
           setShowCalculator(false);
         }}
         positionType="long"
+      />
+
+      <SyncReportDialog
+        open={showSyncReport}
+        onOpenChange={setShowSyncReport}
+        report={syncReport}
       />
     </div>
   );

@@ -99,16 +99,38 @@ Deno.serve(async (req) => {
 
     // Helper function to parse Zerodha format (both tradebook and P&L report)
     const parseZerodhaRow = (row: CSVRow): ParsedTrade | null => {
-      // Get all possible symbol field names
-      const symbol = String(
-        row['symbol'] || row['Symbol'] || row['SYMBOL'] || 
-        row['scrip_name'] || row['Scrip Name'] || 
-        row['__EMPTY'] || row['__EMPTY_0'] || ''
+      // Get symbol - must be a string, not just numbers
+      let symbol = '';
+      
+      // Try named columns first
+      const namedSymbol = String(
+        row['Symbol'] || row['symbol'] || row['SYMBOL'] || 
+        row['scrip_name'] || row['Scrip Name'] || ''
       ).trim();
       
-      // Skip summary rows, headers, and invalid data
+      // Check if it's a valid symbol (has letters, not just numbers)
+      if (namedSymbol && /[A-Za-z]/.test(namedSymbol)) {
+        symbol = namedSymbol;
+      }
+      
+      // If not found, try __EMPTY columns but validate they contain letters
+      if (!symbol) {
+        const possibleSymbols = [
+          row['__EMPTY'], row['__EMPTY_0'], row['__EMPTY_1']
+        ];
+        
+        for (const col of possibleSymbols) {
+          const val = String(col || '').trim();
+          // Must have letters and not be too short
+          if (val && /[A-Za-z]{2,}/.test(val) && val.length >= 2) {
+            symbol = val;
+            break;
+          }
+        }
+      }
+      
+      // Skip if no valid symbol found or if it's a header/summary row
       if (!symbol || 
-          symbol === '' ||
           symbol.includes('Summary') || 
           symbol.includes('Charges') ||
           symbol.includes('Client ID') ||
@@ -116,60 +138,43 @@ Deno.serve(async (req) => {
           symbol.includes('Other Debits') ||
           symbol.includes('View Zerodha') ||
           symbol.includes('Account Head') ||
-          symbol.includes('ISIN') ||
-          symbol === 'Symbol') {
+          symbol.includes('Particulars') ||
+          symbol === 'ISIN' ||
+          symbol === 'Symbol' ||
+          /^\d+$/.test(symbol)) { // Skip if it's only numbers
         return null;
       }
 
-      // Try to find quantity in various columns
-      let quantity = 0;
-      let buyValue = 0;
-      let sellValue = 0;
-      let realizedPnL = 0;
-
-      // Check all numeric columns for data
-      const allKeys = Object.keys(row);
-      for (let i = 0; i < allKeys.length; i++) {
-        const key = allKeys[i];
-        const value = String(row[key]).trim();
-        
-        // Skip if not a number
-        if (isNaN(parseFloat(value)) || value === '') continue;
-        
-        const numValue = parseFloat(value);
-        
-        // Quantity is usually the first numeric column (index 2-3)
-        if (i >= 2 && i <= 3 && quantity === 0 && numValue > 0 && numValue < 100000) {
-          quantity = numValue;
-        }
-        // Buy Value is usually next (index 3-4)
-        else if (i >= 3 && i <= 4 && buyValue === 0 && numValue > 100) {
-          buyValue = numValue;
-        }
-        // Sell Value is usually next (index 4-5)
-        else if (i >= 4 && i <= 5 && sellValue === 0 && numValue > 100) {
-          sellValue = numValue;
-        }
-        // Realized P&L comes after (index 5-6), can be negative
-        else if (i >= 5 && i <= 6 && realizedPnL === 0) {
-          realizedPnL = numValue;
-        }
-      }
-
-      // Also try named columns for P&L report
-      if (quantity === 0) quantity = parseFloat(String(row['Quantity'] || row['quantity'] || row['qty'] || '0'));
-      if (buyValue === 0) buyValue = parseFloat(String(row['Buy Value'] || row['buy_value'] || '0'));
-      if (sellValue === 0) sellValue = parseFloat(String(row['Sell Value'] || row['sell_value'] || '0'));
-      if (realizedPnL === 0) realizedPnL = parseFloat(String(row['Realized P&L'] || row['Realised P&L'] || row['pnl'] || row['P&L'] || '0'));
+      // Get numeric columns - need to find them by position or name
+      const quantity = parseFloat(String(
+        row['Quantity'] || row['quantity'] || row['qty'] || 
+        row['__EMPTY_2'] || row['__EMPTY_3'] || '0'
+      ));
       
-      // P&L Report format (aggregate data)
+      const buyValue = parseFloat(String(
+        row['Buy Value'] || row['buy_value'] || 
+        row['__EMPTY_3'] || row['__EMPTY_4'] || '0'
+      ));
+      
+      const sellValue = parseFloat(String(
+        row['Sell Value'] || row['sell_value'] || 
+        row['__EMPTY_4'] || row['__EMPTY_5'] || '0'
+      ));
+      
+      const realizedPnL = parseFloat(String(
+        row['Realized P&L'] || row['Realised P&L'] || 
+        row['pnl'] || row['P&L'] || row['profit_loss'] ||
+        row['__EMPTY_5'] || row['__EMPTY_6'] || '0'
+      ));
+      
+      // P&L Report format (aggregate data with buy/sell values)
       if (buyValue > 0 && sellValue > 0 && quantity > 0) {
         const avgBuyPrice = buyValue / quantity;
         const avgSellPrice = sellValue / quantity;
         
         return {
           symbol,
-          tradeDate: new Date().toISOString().split('T')[0], // Use today's date for P&L reports
+          tradeDate: new Date().toISOString().split('T')[0],
           quantity,
           buyPrice: avgBuyPrice,
           sellPrice: avgSellPrice,

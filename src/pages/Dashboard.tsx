@@ -105,11 +105,11 @@ const Dashboard = () => {
         fetchStats();
         fetchRecentTrades();
       } else {
-        // Check if it's a token expiration error
-        if (data.isTokenExpired && data.instructions) {
+        // Check if it's a token expiration or connection issue
+        if (data.isTokenExpired) {
           toast({
-            title: "Zerodha Access Token Expired",
-            description: data.instructions,
+            title: "Zerodha Not Connected",
+            description: data.instructions || "Please go to Settings to connect your Zerodha account. You'll need to save your API key and secret, then complete the OAuth connection.",
             variant: "destructive",
             duration: 10000,
           });

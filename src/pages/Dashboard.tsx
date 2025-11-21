@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, Activity, DollarSign, Calculator, RefreshCw } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, DollarSign, Calculator, RefreshCw, Upload } from "lucide-react";
 import { PositionSizeCalculator } from "@/components/PositionSizeCalculator";
 import { SyncReportDialog } from "@/components/SyncReportDialog";
+import { CSVImportDialog } from "@/components/CSVImportDialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
@@ -37,6 +38,7 @@ const Dashboard = () => {
   const [syncing, setSyncing] = useState(false);
   const [syncReport, setSyncReport] = useState<SyncReport | null>(null);
   const [showSyncReport, setShowSyncReport] = useState(false);
+  const [showCSVImport, setShowCSVImport] = useState(false);
 
   useEffect(() => {
     fetchStats();
@@ -174,25 +176,36 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={handleSyncZerodha}>
+        <Card className="cursor-pointer hover:bg-accent/50 transition-colors">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <RefreshCw className={`h-5 w-5 text-primary ${syncing ? 'animate-spin' : ''}`} />
-              Sync Zerodha Trades
+              Sync & Import Trades
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Automatically import your trades from Zerodha Kite. Syncs all executed trades and updates your journal.
+            <p className="text-sm text-muted-foreground mb-4">
+              Import trades from Zerodha: sync today's orders via API or upload historical data via CSV.
             </p>
-            <Button 
-              variant="outline" 
-              className="mt-4 w-full" 
-              onClick={(e) => { e.stopPropagation(); handleSyncZerodha(); }}
-              disabled={syncing}
-            >
-              {syncing ? 'Syncing...' : 'Sync Now'}
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                className="flex-1" 
+                onClick={handleSyncZerodha}
+                disabled={syncing}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? 'Syncing...' : 'Sync Today'}
+              </Button>
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => setShowCSVImport(true)}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Import CSV
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -292,10 +305,14 @@ const Dashboard = () => {
         positionType="long"
       />
 
-      <SyncReportDialog
-        open={showSyncReport}
+      <SyncReportDialog 
+        open={showSyncReport} 
         onOpenChange={setShowSyncReport}
         report={syncReport}
+      />
+      <CSVImportDialog 
+        open={showCSVImport}
+        onOpenChange={setShowCSVImport}
       />
     </div>
   );

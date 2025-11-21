@@ -97,17 +97,52 @@ Deno.serve(async (req) => {
       return 'equity';
     };
 
-    // Helper function to parse Zerodha format
+    // Helper function to parse Zerodha format (both tradebook and P&L report)
     const parseZerodhaRow = (row: CSVRow): ParsedTrade | null => {
       const symbol = String(row['symbol'] || row['Symbol'] || row['SYMBOL'] || row['scrip_name'] || '').trim();
-      const tradeDate = String(row['trade_date'] || row['Trade date'] || row['Date'] || row['date'] || '').trim();
+      
+      // Skip summary rows and headers
+      if (!symbol || 
+          symbol.includes('Summary') || 
+          symbol.includes('Charges') ||
+          symbol.includes('Client ID') ||
+          symbol.includes('P&L Statement') ||
+          symbol.includes('Other Debits')) {
+        return null;
+      }
+
+      // Try P&L report format first (has Buy Value, Sell Value columns)
+      const buyValue = parseFloat(String(row['Buy Value'] || row['buy_value'] || '0'));
+      const sellValue = parseFloat(String(row['Sell Value'] || row['sell_value'] || '0'));
       const quantity = parseFloat(String(row['quantity'] || row['Quantity'] || row['qty'] || '0'));
+      const realizedPnL = parseFloat(String(row['Realized P&L'] || row['Realised P&L'] || row['pnl'] || row['P&L'] || row['profit_loss'] || '0'));
+      
+      // P&L Report format (aggregate data)
+      if (buyValue > 0 && sellValue > 0 && quantity > 0) {
+        const avgBuyPrice = buyValue / quantity;
+        const avgSellPrice = sellValue / quantity;
+        
+        return {
+          symbol,
+          tradeDate: new Date().toISOString().split('T')[0], // Use today's date for P&L reports
+          quantity,
+          buyPrice: avgBuyPrice,
+          sellPrice: avgSellPrice,
+          pnl: realizedPnL,
+          tradeType: 'both',
+          category: determineCategory(symbol),
+          broker: 'zerodha'
+        };
+      }
+
+      // Tradebook format (individual trades with dates)
+      const tradeDate = String(row['trade_date'] || row['Trade date'] || row['Date'] || row['date'] || '').trim();
       const buyPrice = parseFloat(String(row['trade_price'] || row['Price'] || row['price'] || row['buy_price'] || '0'));
       const sellPrice = parseFloat(String(row['sell_price'] || row['Sell Price'] || '0'));
       const pnl = parseFloat(String(row['pnl'] || row['P&L'] || row['profit_loss'] || '0'));
       const tradeType = String(row['trade_type'] || row['Type'] || row['type'] || '').toLowerCase();
 
-      if (!symbol || !tradeDate || !quantity || (buyPrice === 0 && sellPrice === 0)) {
+      if (!tradeDate || !quantity || (buyPrice === 0 && sellPrice === 0)) {
         return null;
       }
 

@@ -15,6 +15,8 @@ const Settings = () => {
   const [apiSecret, setApiSecret] = useState("");
   const [isConnected, setIsConnected] = useState(false);
   const [tokenExpired, setTokenExpired] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{ valid: boolean; message?: string; error?: string } | null>(null);
 
   useEffect(() => {
     fetchCredentials();
@@ -114,6 +116,57 @@ const Settings = () => {
     const redirectUri = `${window.location.origin}/auth/zerodha/callback`;
     const zerodhaAuthUrl = `https://kite.zerodha.com/connect/login?api_key=${apiKey}&redirect_url=${encodeURIComponent(redirectUri)}`;
     window.location.href = zerodhaAuthUrl;
+  };
+
+  const handleTestConnection = async () => {
+    if (!apiKey.trim()) {
+      toast({
+        title: "Error",
+        description: "Please save your API key first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setTestingConnection(true);
+    setTestResult(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      const { data, error } = await supabase.functions.invoke('test-zerodha-connection', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error) throw error;
+
+      setTestResult(data);
+
+      if (data.valid) {
+        toast({
+          title: "Success",
+          description: data.message || "API key is valid!",
+        });
+      } else {
+        toast({
+          title: "Validation Failed",
+          description: data.error || "API key validation failed",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error testing connection:", error);
+      toast({
+        title: "Error",
+        description: "Failed to test connection",
+        variant: "destructive",
+      });
+    } finally {
+      setTestingConnection(false);
+    }
   };
 
   const handleDisconnect = async () => {
@@ -220,20 +273,43 @@ const Settings = () => {
             />
           </div>
 
+          {/* Test Result */}
+          {testResult && (
+            <div className={`p-4 rounded-lg border ${
+              testResult.valid 
+                ? 'bg-green-500/10 border-green-500/20 text-green-600 dark:text-green-400' 
+                : 'bg-destructive/10 border-destructive/20 text-destructive'
+            }`}>
+              <p className="text-sm font-medium">
+                {testResult.valid ? '✓ ' : '✗ '}
+                {testResult.message || testResult.error}
+              </p>
+            </div>
+          )}
+
           {/* Action Buttons */}
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-4">
             <Button
               onClick={handleSaveApiKey}
-              disabled={loading}
+              disabled={loading || testingConnection}
             >
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save API Credentials
             </Button>
 
+            <Button
+              onClick={handleTestConnection}
+              disabled={loading || testingConnection || !apiKey}
+              variant="secondary"
+            >
+              {testingConnection && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Test Connection
+            </Button>
+
             {!isConnected || tokenExpired ? (
               <Button
                 onClick={handleConnectZerodha}
-                disabled={loading || !apiKey}
+                disabled={loading || testingConnection || !apiKey}
                 variant="outline"
               >
                 {tokenExpired ? 'Reconnect to Zerodha' : 'Connect to Zerodha'}
@@ -241,7 +317,7 @@ const Settings = () => {
             ) : (
               <Button
                 onClick={handleDisconnect}
-                disabled={loading}
+                disabled={loading || testingConnection}
                 variant="destructive"
               >
                 Disconnect

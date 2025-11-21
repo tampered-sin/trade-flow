@@ -60,6 +60,35 @@ const Trades = () => {
     }
   };
 
+  const getCategoryBadgeStyle = (tag: string) => {
+    const lowerTag = tag.toLowerCase();
+    
+    // Category colors
+    if (lowerTag === 'equity') {
+      return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 hover:bg-blue-500/20';
+    }
+    if (lowerTag === 'futures') {
+      return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20 hover:bg-purple-500/20';
+    }
+    if (lowerTag === 'options') {
+      return 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20 hover:bg-orange-500/20';
+    }
+    if (lowerTag === 'f&o') {
+      return 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20 hover:bg-violet-500/20';
+    }
+    
+    // Broker colors
+    if (lowerTag === 'zerodha') {
+      return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20';
+    }
+    if (lowerTag === 'groww') {
+      return 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/20';
+    }
+    
+    // Default
+    return 'bg-muted text-muted-foreground border-border';
+  };
+
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from("trades").delete().eq("id", id);
 
@@ -209,7 +238,11 @@ const Trades = () => {
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {trade.tags && trade.tags.map((tag: string, idx: number) => (
-                            <Badge key={idx} variant="secondary" className="text-xs">
+                            <Badge 
+                              key={idx} 
+                              variant="outline" 
+                              className={`text-xs font-medium transition-all ${getCategoryBadgeStyle(tag)}`}
+                            >
                               {tag}
                             </Badge>
                           ))}

@@ -1,73 +1,95 @@
-# Welcome to your Lovable project
+# Backend Architecture & Usage
 
-## Project info
+## Architecture
+- FastAPI (async) application with SQLAlchemy 2.0 async and `asyncpg` driver.
+- PostgreSQL schema with Alembic migrations.
+- Auth:
+  - Local email/password with JWT.
+  - OAuth via Authlib (Google, GitHub) and broker adapters (Zerodha placeholder).
+  - HTTPOnly session middleware for OAuth state/nonce.
+- Token storage encrypted at rest using AES‑256‑GCM with `OAUTH_TOKEN_ENCRYPTION_KEY`.
+- Celery + Redis background tasks for token refresh (<5 min to expiry) and broker sync.
+- Docker Compose services: `app`, `worker`, `beat`, `db`, `pgadmin`, `redis`.
 
-**URL**: https://lovable.dev/projects/fee3e975-ff3b-4cde-bb92-c4ab387373d1
+## Run Locally
+1) Copy `.env.example` to `.env` and fill values.
+2) Start services:
+```
+docker compose up --build
+```
+3) Apply migrations inside the `app` container:
+```
+alembic upgrade head
+```
+4) Open API docs: `http://localhost:8000/docs`
 
-## How can I edit this code?
+## Environment Variables
+Key variables (see `.env.example`):
+- `DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/tradeflow`
+- `APP_JWT_SECRET`, `APP_JWT_ALG=HS256`
+- `OAUTH_TOKEN_ENCRYPTION_KEY` (base64 or 32‑byte key)
+- `SESSION_SECRET` (enables session middleware for OAuth state)
+- `BASE_URL=http://localhost:8000`
+- `REDIS_URL=redis://redis:6379/0`
+- Provider vars: `GOOGLE_*`, `GITHUB_*`, `ZERODHA_*` with redirect URIs
+- `CORS_ALLOW_ORIGINS=http://localhost:5173`
 
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/fee3e975-ff3b-4cde-bb92-c4ab387373d1) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+Generate encryption key:
+```
+python -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
 ```
 
-**Edit a file directly in GitHub**
+## OAuth Registration
+### Google (OIDC)
+- Create a Google OAuth client (Web application).
+- Authorized redirect URI: `http://localhost:8000/oauth/google/callback`
+- Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`.
+- Start flow: `GET /oauth/google/login` (handled via Authlib). Callback validates ID token.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### GitHub
+- Create OAuth App.
+- Redirect URI: `http://localhost:8000/oauth/github/callback`
+- Set `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_REDIRECT_URI`.
 
-**Use GitHub Codespaces**
+### Zerodha (Broker)
+- Create Kite Connect app.
+- Redirect URL: `http://localhost:8000/oauth/zerodha/callback`
+- Set `ZERODHA_API_KEY`, `ZERODHA_API_SECRET`, `ZERODHA_REDIRECT_URI`.
+- Note: Zerodha uses `request_token`; exchange and sync implemented via adapter pattern (placeholders provided).
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Endpoints
+- Auth: `POST /auth/register`, `POST /auth/login`
+- OAuth: `GET /oauth/{provider}/login`, `GET /oauth/{provider}/callback`
+- Connections: `GET /connections`, `POST /connections/{id}/refresh`, `POST /connections/{id}/disconnect`
+- Trades: `POST /trades`, `GET /trades`
+- Import: `POST /import/csv`
+- Analytics: `GET /analytics/equity-curve`, `GET /analytics/winrate`
+- Webhooks: `POST /webhook/{provider}`
 
-## What technologies are used for this project?
+## Migrations
+Run inside `app` container:
+```
+alembic upgrade head
+```
 
-This project is built with:
+## Tests
+Run tests locally:
+```
+pytest -q backend/app/tests
+```
+CI is provided via GitHub Actions (`.github/workflows/ci.yml`) which launches Postgres and Redis services and runs tests.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Security Notes
+- Store secrets only in environment variables or a secret manager.
+- Rotate `APP_JWT_SECRET`, `SESSION_SECRET`, and `OAUTH_TOKEN_ENCRYPTION_KEY` periodically.
+- Never log raw tokens; all tokens are encrypted at rest.
+- Use HTTPS in production; set `same_site` and `secure` flags appropriately for cookies.
 
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/fee3e975-ff3b-4cde-bb92-c4ab387373d1) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Provider Adapter Interface
+To add brokers, implement an adapter with methods:
+- `authorize_url()`
+- `exchange_code(code, code_verifier)`
+- `refresh_token(refresh_token)`
+- `revoke_token(access_token)`
+- `get_account_id(userinfo_or_token)`
+Then wire into the OAuth routes and Celery refresh logic.

@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tradeflow_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6380:6379
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5433/tradeflow_test
+      APP_JWT_SECRET: ci_secret
+      APP_JWT_ALG: HS256
+      OAUTH_TOKEN_ENCRYPTION_KEY: c2VjdXJlX2VuY3J5cHRpb25fa2V5X2Rpc2c=
+      REDIS_URL: redis://localhost:6380/0
+      CORS_ALLOW_ORIGINS: http://localhost:5173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+      - name: Run tests
+        run: |
+          pytest -q backend/app/tests
